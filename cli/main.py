@@ -5,10 +5,11 @@ Commands:
   collect-linux    - Run read-only Linux triage collection
   collect-windows  - Run read-only Windows triage collection
   collect-macos    - Run read-only macOS triage collection
+  analyze-process-tree - Review offline process-tree JSON for suspicious execution
   parse-logs       - Parse auth.log and produce normalized events JSON
   parse-macos-unified-log - Parse macOS log show exports into normalized events
   build-timeline   - Merge events from a JSON file into a chronological timeline
-  generate-report  - Export a timeline file to HTML, CSV, TXT, JSON, or JSONL
+  generate-report  - Export a timeline file to HTML, CSV, TXT, JSON, JSONL, or ECS NDJSON
 """
 from __future__ import annotations
 
@@ -29,10 +30,19 @@ sys.path.insert(0, str(REPO_ROOT))
 from collectors.linux.triage import run_linux_triage
 from collectors.macos.triage import run_macos_triage
 from collectors.windows.triage import run_windows_triage
+from analyzers.process_tree_analyzer import ProcessNode, ProcessTreeAnalyzer, PTSeverity
 from parsers.authlog import parse_authlog
 from parsers.macos_unified_log import parse_macos_unified_log
 from timelines.builder import build_timeline
 from timelines.reporter import export_timeline, filter_timeline
+
+
+_PT_SEVERITY_RANK = {
+    PTSeverity.LOW.value: 1,
+    PTSeverity.MEDIUM.value: 2,
+    PTSeverity.HIGH.value: 3,
+    PTSeverity.CRITICAL.value: 4,
+}
 
 
 def _parse_iso8601(value: str) -> datetime:
@@ -65,6 +75,27 @@ def _load_timeline_entries(path: Path) -> tuple[list[dict], str | None]:
     )
 
 
+def _load_process_nodes(path: Path) -> list[ProcessNode]:
+    """Load ProcessNode objects from a JSON array or {"processes": [...]} document."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict) and isinstance(payload.get("processes"), list):
+        rows = payload["processes"]
+    elif isinstance(payload, list):
+        rows = payload
+    else:
+        raise click.ClickException("Process input must be a JSON array or an object with a 'processes' array.")
+
+    nodes: list[ProcessNode] = []
+    for index, row in enumerate(rows, start=1):
+        if not isinstance(row, dict):
+            raise click.ClickException(f"Process entry {index} must be an object.")
+        try:
+            nodes.append(ProcessNode(**row))
+        except TypeError as exc:
+            raise click.ClickException(f"Invalid process entry {index}: {exc}") from exc
+    return nodes
+
+
 @click.group()
 def cli() -> None:
     """k1n DFIR Attack Lab — incident triage and timeline toolkit."""
@@ -95,6 +126,43 @@ def collect_macos(output_dir: str, case_id: str) -> None:
     """Run read-only macOS system triage and write observations to JSONL."""
     path = run_macos_triage(Path(output_dir), case_id)
     click.echo(f"Triage complete: {path}")
+
+
+@cli.command(name="analyze-process-tree")
+@click.argument("processes_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
+@click.option("--output", "-o", default="-", help="Output file path (default: stdout)")
+@click.option(
+    "--child-count-threshold",
+    default=20,
+    show_default=True,
+    type=click.IntRange(min=1),
+    help="Child process count above which PT-006 fires.",
+)
+@click.option(
+    "--fail-on",
+    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
+    help="Exit non-zero when any finding is at or above this severity.",
+)
+def analyze_process_tree(
+    processes_file: Path,
+    output: str,
+    child_count_threshold: int,
+    fail_on: str | None,
+) -> None:
+    """Analyze offline process-tree JSON for suspicious execution patterns."""
+    nodes = _load_process_nodes(processes_file)
+    report = ProcessTreeAnalyzer(child_count_threshold=child_count_threshold).analyze(nodes)
+    data = json.dumps(report.to_dict(), indent=2)
+    if output == "-":
+        click.echo(data)
+    else:
+        Path(output).write_text(data, encoding="utf-8")
+        click.echo(f"Wrote {report.total_findings} process-tree findings to {output}")
+
+    if fail_on:
+        threshold = _PT_SEVERITY_RANK[fail_on.upper()]
+        if any(_PT_SEVERITY_RANK[finding.severity.value] >= threshold for finding in report.findings):
+            raise click.ClickException(f"Process-tree findings met --fail-on {fail_on.lower()} threshold.")
 
 
 @cli.command()
@@ -163,10 +231,10 @@ def build_timeline_cmd_legacy(events_file: str, gap: int, output: str) -> None:
 @click.option(
     "--format",
     "report_format",
-    type=click.Choice(["html", "csv", "txt", "json", "jsonl"], case_sensitive=False),
+    type=click.Choice(["html", "csv", "txt", "json", "jsonl", "ecs"], case_sensitive=False),
     default="html",
     show_default=True,
-    help="Report export format.",
+    help="Report export format. Use 'ecs' for Elastic Common Schema NDJSON.",
 )
 @click.option("--output", "-o", required=True, type=click.Path(dir_okay=False, path_type=Path))
 @click.option(
@@ -183,7 +251,7 @@ def build_timeline_cmd_legacy(events_file: str, gap: int, output: str) -> None:
 @click.option("--start", help="UTC start timestamp in ISO 8601 format.")
 @click.option("--end", help="UTC end timestamp in ISO 8601 format.")
 @click.option("--exclude-gaps", is_flag=True, help="Exclude gap markers from the exported report.")
-@click.option("--case-id", help="Override the case identifier embedded in JSON and HTML exports.")
+@click.option("--case-id", help="Override the case identifier embedded in generated reports.")
 def generate_report(
     timeline_file: Path,
     report_format: str,

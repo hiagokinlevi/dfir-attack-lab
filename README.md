@@ -11,7 +11,8 @@ Provide SOC analysts, incident responders, and forensics practitioners with a st
 1. Capture a live system snapshot without altering any state.
 2. Parse raw log sources into normalized, machine-readable events.
 3. Reconstruct a chronological incident timeline with automated gap detection.
-4. Export filtered reports in formats that are useful for tickets, spreadsheets, and offline review.
+4. Analyze offline process-tree exports for suspicious parent-child execution, LOLBins, masquerading, hollowing indicators, and attacker tooling.
+5. Export filtered reports in formats that are useful for tickets, spreadsheets, and offline review.
 
 All operations are strictly **read-only**. No files are created, modified, or deleted on the target system.
 
@@ -26,7 +27,8 @@ Key problems addressed:
 - **Inconsistent collection**: one command surface, one output model, and read-only collectors for multiple operating systems.
 - **Log source fragmentation**: Linux auth logs and Windows event log exports normalize into the same `TriageEvent` schema.
 - **Hidden timeline gaps**: the builder flags periods where log activity is absent, which may indicate tampering, rotation, or collection error.
-- **Weak incident reporting**: the reporter exports HTML, CSV, TXT, JSON, and JSONL artifacts with optional filtering by severity, category, and time window.
+- **Process execution blind spots**: offline EDR or triage process-list exports can be reviewed for suspicious parent-child relationships, attacker tooling, LOLBins, and masquerading without touching the endpoint.
+- **Weak incident reporting**: the reporter exports HTML, CSV, TXT, JSON, JSONL, and Elastic Common Schema NDJSON artifacts with optional filtering by severity, category, and time window.
 
 ---
 
@@ -118,6 +120,26 @@ k1n-dfir build-timeline /tmp/dfir-output/events.json --gap 30 -o /tmp/dfir-outpu
 
 The `--gap` flag sets the minimum gap duration (in minutes) that triggers a gap marker in the timeline.
 
+### Analyze an offline process-tree export
+
+Review a JSON array, or an object with a `processes` array, where each process entry matches the `ProcessNode` fields: `pid`, `ppid`, `name`, `cmdline`, `parent_name`, `path`, `user`, and `child_count`.
+
+```bash
+k1n-dfir analyze-process-tree /tmp/dfir-output/processes.json \
+  --fail-on high \
+  -o /tmp/dfir-output/process-tree-report.json
+```
+
+The analyzer is offline-only and read-only. It flags:
+
+- suspicious Office/browser parent-to-shell execution (`PT-001`)
+- system process masquerading outside `System32` (`PT-002`)
+- LOLBin execution (`PT-003`)
+- shells spawned from service-context parents (`PT-004`)
+- empty or name-only shell command lines (`PT-005`)
+- abnormal child-process fan-out (`PT-006`)
+- known attacker tool names in process names or command lines (`PT-007`)
+
 ### Parse a macOS Unified Log export
 
 Export a compact unified log snapshot on the target host and then parse it offline:
@@ -150,6 +172,14 @@ Supported report formats:
 - `csv` for spreadsheet workflows
 - `txt` for chatops or incident tickets
 - `json` and `jsonl` for downstream automation
+- `ecs` for Elastic Common Schema NDJSON SIEM import
+
+```bash
+k1n-dfir generate-report /tmp/dfir-output/timeline.json \
+  --format ecs \
+  --output /tmp/dfir-output/timeline.ecs.ndjson \
+  --case-id CASE-001
+```
 
 ### Run tests
 

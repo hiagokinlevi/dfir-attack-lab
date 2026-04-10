@@ -262,6 +262,49 @@ class TestExportJSONL(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# export_timeline — ECS NDJSON
+# ---------------------------------------------------------------------------
+
+
+class TestExportECS(unittest.TestCase):
+
+    def test_ecs_maps_event_fields_for_siem_import(self):
+        event = _event(
+            1,
+            severity="high",
+            category="authentication",
+            actor="203.0.113.10",
+            action="ssh_login_failure",
+        )
+        tl = _make_timeline(event, gap_threshold=120)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "out.ecs.ndjson"
+            export_timeline(tl, path, fmt="ecs", case_id="CASE-ECS-001")
+            docs = [json.loads(line) for line in path.read_text().splitlines()]
+
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(docs[0]["labels"]["case_id"], "CASE-ECS-001")
+        self.assertEqual(docs[0]["ecs"]["version"], "8.11.0")
+        self.assertEqual(docs[0]["event"]["category"], ["authentication"])
+        self.assertEqual(docs[0]["event"]["severity"], 73)
+        self.assertEqual(docs[0]["event"]["action"], "ssh_login_failure")
+        self.assertEqual(docs[0]["source"]["ip"], "203.0.113.10")
+        self.assertEqual(docs[0]["log"]["file"]["path"], "auth.log")
+
+    def test_ecs_serializes_timeline_gaps(self):
+        tl = _make_timeline(_event(1), _event(5), gap_threshold=120)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "out.ecs.ndjson"
+            export_timeline(tl, path, fmt="ecs", case_id="CASE-GAP")
+            docs = [json.loads(line) for line in path.read_text().splitlines()]
+
+        gap_docs = [doc for doc in docs if doc["event"]["action"] == "timeline_gap"]
+        self.assertEqual(len(gap_docs), 1)
+        self.assertEqual(gap_docs[0]["event"]["kind"], "state")
+        self.assertEqual(gap_docs[0]["dfir"]["gap_minutes"], 240.0)
+
+
+# ---------------------------------------------------------------------------
 # export_timeline — JSON
 # ---------------------------------------------------------------------------
 

@@ -61,16 +61,29 @@ Status: **Complete**
 
 ---
 
-## v0.5 — SIEM Export Adapters
+## v0.5 — Offline Process Execution Analysis
 
-Status: Planned
+Status: **Complete**
+
+- Process tree analyzer for offline EDR and triage process-list exports
+  - Detects suspicious Office/browser parent-to-shell execution, system process masquerading, LOLBins, unusual service-context shells, empty shell command lines, child-process fan-out, and attacker tool keywords
+  - Exposed via `k1n-dfir analyze-process-tree`
+  - Supports JSON output and `--fail-on` severity gating for CI or case-review automation
+
+---
+
+## v0.6 — SIEM Export Adapters
+
+Status: In Progress
 
 - Output adapters for:
+  - Elastic Common Schema (ECS) NDJSON — complete via `k1n-dfir generate-report --format ecs`
+    - Maps timeline events, case IDs, actor IP/user context, log source paths, severity, raw evidence, and timeline gaps into ECS-oriented documents
   - Splunk HEC (HTTP Event Collector)
-  - Elastic Common Schema (ECS) NDJSON
   - Microsoft Sentinel CEF format
-- Configurable via environment variables in `.env`
-- Batch upload with retry logic and rate limiting
+- Planned live-upload support:
+  - Configurable via environment variables in `.env`
+  - Batch upload with retry logic and rate limiting
 
 ---
 

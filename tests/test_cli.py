@@ -83,6 +83,52 @@ class TestCollectionCommands(unittest.TestCase):
         mocked.assert_called_once()
         self.assertEqual(payload[0]["action"], parsed_event["action"])
 
+    def test_analyze_process_tree_writes_report(self):
+        processes = [
+            {
+                "pid": 500,
+                "ppid": 100,
+                "name": "cmd.exe",
+                "cmdline": "cmd.exe /c whoami",
+                "parent_name": "winword.exe",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "processes.json"
+            output_path = Path(tmpdir) / "process-report.json"
+            input_path.write_text(json.dumps({"processes": processes}), encoding="utf-8")
+
+            result = self.runner.invoke(
+                cli,
+                ["analyze-process-tree", str(input_path), "-o", str(output_path)],
+            )
+            report = json.loads(output_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(report["processes_analyzed"], 1)
+        self.assertEqual(report["findings"][0]["check_id"], "PT-001")
+
+    def test_analyze_process_tree_fail_on_threshold_exits_nonzero(self):
+        processes = [
+            {
+                "pid": 501,
+                "name": "powershell.exe",
+                "cmdline": "powershell.exe -nop",
+                "parent_name": "excel.exe",
+            }
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            input_path = Path(tmpdir) / "processes.json"
+            input_path.write_text(json.dumps(processes), encoding="utf-8")
+
+            result = self.runner.invoke(
+                cli,
+                ["analyze-process-tree", str(input_path), "--fail-on", "high"],
+            )
+
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("met --fail-on high", result.output)
+
 
 class TestTimelineCommands(unittest.TestCase):
 
@@ -161,6 +207,33 @@ class TestTimelineCommands(unittest.TestCase):
         self.assertEqual(report["summary"]["total_events"], 1)
         self.assertEqual(report["summary"]["gap_count"], 0)
         self.assertEqual(report["timeline"][0]["severity"], "high")
+
+    def test_generate_report_supports_ecs_ndjson(self):
+        timeline = build_timeline([_event(1, severity="high")], gap_threshold_minutes=120)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            timeline_path = Path(tmpdir) / "timeline.json"
+            report_path = Path(tmpdir) / "timeline.ecs.ndjson"
+            timeline_path.write_text(json.dumps(timeline, indent=2), encoding="utf-8")
+
+            result = self.runner.invoke(
+                cli,
+                [
+                    "generate-report",
+                    str(timeline_path),
+                    "--format",
+                    "ecs",
+                    "-o",
+                    str(report_path),
+                    "--case-id",
+                    "CASE-ECS-CLI",
+                ],
+            )
+
+            event = json.loads(report_path.read_text(encoding="utf-8").splitlines()[0])
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertEqual(event["labels"]["case_id"], "CASE-ECS-CLI")
+        self.assertEqual(event["event"]["severity"], 73)
 
     def test_generate_report_requires_both_start_and_end(self):
         timeline = build_timeline([_event(1)], gap_threshold_minutes=60)

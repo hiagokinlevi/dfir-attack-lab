@@ -5,6 +5,7 @@ Filters, summarizes, and exports an incident timeline to multiple formats.
 
 Supported export formats:
   - JSONL: one JSON object per line (machine-readable, for SIEM ingestion)
+  - ECS:   Elastic Common Schema NDJSON for SIEM import
   - JSON:  full timeline array in a single JSON document
   - HTML:  self-contained HTML report for human review (no external dependencies)
   - CSV:   flattened rows suitable for spreadsheets and ticket attachments
@@ -35,6 +36,7 @@ Usage:
 from __future__ import annotations
 
 import csv
+import ipaddress
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -184,7 +186,7 @@ def export_timeline(
     Args:
         timeline:     Timeline entries (output of build_timeline or filter_timeline).
         output_path:  Destination file path.
-        fmt:          Export format: "jsonl", "json", "html", "csv", or "txt".
+        fmt:          Export format: "jsonl", "ecs", "json", "html", "csv", or "txt".
         case_id:      Case identifier for report headers.
 
     Returns:
@@ -194,6 +196,8 @@ def export_timeline(
 
     if fmt == "jsonl":
         _export_jsonl(timeline, output_path)
+    elif fmt == "ecs":
+        _export_ecs_ndjson(timeline, output_path, case_id)
     elif fmt == "json":
         _export_json(timeline, output_path, case_id)
     elif fmt == "html":
@@ -203,7 +207,7 @@ def export_timeline(
     elif fmt == "txt":
         _export_txt(timeline, output_path, case_id)
     else:
-        raise ValueError(f"Unknown export format: '{fmt}'. Use: jsonl, json, html, csv, txt")
+        raise ValueError(f"Unknown export format: '{fmt}'. Use: jsonl, ecs, json, html, csv, txt")
 
     return output_path
 
@@ -213,6 +217,96 @@ def _export_jsonl(timeline: list[dict], path: Path) -> None:
     with path.open("w", encoding="utf-8") as fh:
         for entry in timeline:
             fh.write(json.dumps(entry) + "\n")
+
+
+def _ecs_severity(severity: str) -> int:
+    """Map the toolkit's severity hints to ECS-compatible numeric severity."""
+    return {
+        "info": 1,
+        "low": 21,
+        "medium": 47,
+        "high": 73,
+    }.get(severity, 1)
+
+
+def _ecs_category(category: str) -> list[str]:
+    """Map normalized DFIR categories into broad ECS event.category values."""
+    return {
+        "authentication": ["authentication"],
+        "network": ["network"],
+        "process": ["process"],
+        "filesystem": ["file"],
+        "privilege_escalation": ["iam"],
+        "system": ["configuration"],
+        "unknown": ["intrusion_detection"],
+    }.get(category, ["intrusion_detection"])
+
+
+def _actor_fields(actor: str | None) -> dict:
+    """Represent an actor as source.ip when it parses as an IP, else user.name."""
+    if not actor:
+        return {}
+    try:
+        ipaddress.ip_address(actor)
+    except ValueError:
+        return {"user": {"name": actor}}
+    return {"source": {"ip": actor}, "related": {"ip": [actor]}}
+
+
+def _timeline_entry_to_ecs(entry: dict, case_id: str) -> dict:
+    """Convert one timeline entry into an ECS-oriented event document."""
+    if entry.get("_type") == "gap":
+        return {
+            "@timestamp": entry.get("end"),
+            "ecs": {"version": "8.11.0"},
+            "event": {
+                "kind": "state",
+                "category": ["configuration"],
+                "type": ["info"],
+                "action": "timeline_gap",
+                "reason": "No timeline events were observed between adjacent evidence entries.",
+                "duration": int(float(entry.get("duration_minutes", 0)) * 60_000_000_000),
+            },
+            "labels": {"case_id": case_id},
+            "dfir": {
+                "gap_start": entry.get("start"),
+                "gap_end": entry.get("end"),
+                "gap_minutes": entry.get("duration_minutes"),
+            },
+            "observer": {"product": "k1n-dfir-attack-lab"},
+        }
+
+    severity = entry.get("severity", "info")
+    category = entry.get("category", "unknown")
+    doc = {
+        "@timestamp": entry.get("timestamp"),
+        "ecs": {"version": "8.11.0"},
+        "event": {
+            "kind": "event",
+            "category": _ecs_category(category),
+            "type": ["info"],
+            "action": entry.get("action"),
+            "severity": _ecs_severity(severity),
+            "risk_score": _ecs_severity(severity),
+            "original": entry.get("raw"),
+        },
+        "message": entry.get("raw"),
+        "log": {"file": {"path": entry.get("source_file")}},
+        "labels": {"case_id": case_id, "dfir_category": category},
+        "observer": {"product": "k1n-dfir-attack-lab"},
+        "dfir": {"target": entry.get("target"), "metadata": entry.get("metadata", {})},
+    }
+    doc.update(_actor_fields(entry.get("actor")))
+    if entry.get("target"):
+        doc["related"] = {**doc.get("related", {}), "hosts": [entry["target"]]}
+    return doc
+
+
+def _export_ecs_ndjson(timeline: list[dict], path: Path, case_id: str) -> None:
+    """Write Elastic Common Schema-oriented NDJSON for SIEM import."""
+    with path.open("w", encoding="utf-8") as fh:
+        for entry in timeline:
+            fh.write(json.dumps(_timeline_entry_to_ecs(entry, case_id), sort_keys=True) + "\n")
 
 
 def _export_json(timeline: list[dict], path: Path, case_id: str) -> None:
