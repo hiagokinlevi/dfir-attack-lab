@@ -235,6 +235,33 @@ class TestTimelineCommands(unittest.TestCase):
         self.assertEqual(event["labels"]["case_id"], "CASE-ECS-CLI")
         self.assertEqual(event["event"]["severity"], 73)
 
+    def test_generate_report_supports_cef(self):
+        timeline = build_timeline([_event(1, severity="medium")], gap_threshold_minutes=120)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            timeline_path = Path(tmpdir) / "timeline.json"
+            report_path = Path(tmpdir) / "timeline.cef"
+            timeline_path.write_text(json.dumps(timeline, indent=2), encoding="utf-8")
+
+            result = self.runner.invoke(
+                cli,
+                [
+                    "generate-report",
+                    str(timeline_path),
+                    "--format",
+                    "cef",
+                    "-o",
+                    str(report_path),
+                    "--case-id",
+                    "CASE-CEF-CLI",
+                ],
+            )
+
+            line = report_path.read_text(encoding="utf-8").splitlines()[0]
+
+        self.assertEqual(result.exit_code, 0, result.output)
+        self.assertIn("deviceExternalId=CASE-CEF-CLI", line)
+        self.assertIn("|authentication:authentication_medium|6|", line)
+
     def test_generate_report_requires_both_start_and_end(self):
         timeline = build_timeline([_event(1)], gap_threshold_minutes=60)
         with tempfile.TemporaryDirectory() as tmpdir:

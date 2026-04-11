@@ -9,7 +9,7 @@ Commands:
   parse-logs       - Parse auth.log and produce normalized events JSON
   parse-macos-unified-log - Parse macOS log show exports into normalized events
   build-timeline   - Merge events from a JSON file into a chronological timeline
-  generate-report  - Export a timeline file to HTML, CSV, TXT, JSON, JSONL, or ECS NDJSON
+  generate-report  - Export a timeline file to HTML, CSV, TXT, JSON, JSONL, ECS NDJSON, or CEF
 """
 from __future__ import annotations
 
@@ -231,10 +231,10 @@ def build_timeline_cmd_legacy(events_file: str, gap: int, output: str) -> None:
 @click.option(
     "--format",
     "report_format",
-    type=click.Choice(["html", "csv", "txt", "json", "jsonl", "ecs"], case_sensitive=False),
+    type=click.Choice(["html", "csv", "txt", "json", "jsonl", "ecs", "cef"], case_sensitive=False),
     default="html",
     show_default=True,
-    help="Report export format. Use 'ecs' for Elastic Common Schema NDJSON.",
+    help="Report export format. Use 'ecs' or 'cef' for SIEM-ready exports.",
 )
 @click.option("--output", "-o", required=True, type=click.Path(dir_okay=False, path_type=Path))
 @click.option(

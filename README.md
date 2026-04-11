@@ -28,7 +28,7 @@ Key problems addressed:
 - **Log source fragmentation**: Linux auth logs and Windows event log exports normalize into the same `TriageEvent` schema.
 - **Hidden timeline gaps**: the builder flags periods where log activity is absent, which may indicate tampering, rotation, or collection error.
 - **Process execution blind spots**: offline EDR or triage process-list exports can be reviewed for suspicious parent-child relationships, attacker tooling, LOLBins, and masquerading without touching the endpoint.
-- **Weak incident reporting**: the reporter exports HTML, CSV, TXT, JSON, JSONL, and Elastic Common Schema NDJSON artifacts with optional filtering by severity, category, and time window.
+- **Weak incident reporting**: the reporter exports HTML, CSV, TXT, JSON, JSONL, Elastic Common Schema NDJSON, and Common Event Format artifacts with optional filtering by severity, category, and time window.
 
 ---
 
@@ -173,11 +173,19 @@ Supported report formats:
 - `txt` for chatops or incident tickets
 - `json` and `jsonl` for downstream automation
 - `ecs` for Elastic Common Schema NDJSON SIEM import
+- `cef` for Microsoft Sentinel / ArcSight Common Event Format ingestion
 
 ```bash
 k1n-dfir generate-report /tmp/dfir-output/timeline.json \
   --format ecs \
   --output /tmp/dfir-output/timeline.ecs.ndjson \
+  --case-id CASE-001
+```
+
+```bash
+k1n-dfir generate-report /tmp/dfir-output/timeline.json \
+  --format cef \
+  --output /tmp/dfir-output/timeline.cef \
   --case-id CASE-001
 ```
 

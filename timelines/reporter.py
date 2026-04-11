@@ -6,6 +6,7 @@ Filters, summarizes, and exports an incident timeline to multiple formats.
 Supported export formats:
   - JSONL: one JSON object per line (machine-readable, for SIEM ingestion)
   - ECS:   Elastic Common Schema NDJSON for SIEM import
+  - CEF:   Common Event Format lines for Microsoft Sentinel or ArcSight ingestion
   - JSON:  full timeline array in a single JSON document
   - HTML:  self-contained HTML report for human review (no external dependencies)
   - CSV:   flattened rows suitable for spreadsheets and ticket attachments
@@ -186,7 +187,7 @@ def export_timeline(
     Args:
         timeline:     Timeline entries (output of build_timeline or filter_timeline).
         output_path:  Destination file path.
-        fmt:          Export format: "jsonl", "ecs", "json", "html", "csv", or "txt".
+        fmt:          Export format: "jsonl", "ecs", "cef", "json", "html", "csv", or "txt".
         case_id:      Case identifier for report headers.
 
     Returns:
@@ -198,6 +199,8 @@ def export_timeline(
         _export_jsonl(timeline, output_path)
     elif fmt == "ecs":
         _export_ecs_ndjson(timeline, output_path, case_id)
+    elif fmt == "cef":
+        _export_cef(timeline, output_path, case_id)
     elif fmt == "json":
         _export_json(timeline, output_path, case_id)
     elif fmt == "html":
@@ -207,7 +210,7 @@ def export_timeline(
     elif fmt == "txt":
         _export_txt(timeline, output_path, case_id)
     else:
-        raise ValueError(f"Unknown export format: '{fmt}'. Use: jsonl, ecs, json, html, csv, txt")
+        raise ValueError(f"Unknown export format: '{fmt}'. Use: jsonl, ecs, cef, json, html, csv, txt")
 
     return output_path
 
@@ -307,6 +310,141 @@ def _export_ecs_ndjson(timeline: list[dict], path: Path, case_id: str) -> None:
     with path.open("w", encoding="utf-8") as fh:
         for entry in timeline:
             fh.write(json.dumps(_timeline_entry_to_ecs(entry, case_id), sort_keys=True) + "\n")
+
+
+def _cef_severity(severity: str) -> int:
+    """Map the toolkit's severity hints to CEF-compatible numeric severity."""
+    return {
+        "info": 1,
+        "low": 3,
+        "medium": 6,
+        "high": 8,
+    }.get(severity, 1)
+
+
+def _escape_cef_header(value: object) -> str:
+    """Escape CEF header values."""
+    text = "" if value is None else str(value)
+    return (
+        text.replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )
+
+
+def _escape_cef_extension(value: object) -> str:
+    """Escape CEF extension values."""
+    text = "" if value is None else str(value)
+    return (
+        text.replace("\\", "\\\\")
+        .replace("=", "\\=")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )
+
+
+def _cef_timestamp_millis(value: str | None) -> int | None:
+    """Convert an ISO 8601 timestamp string into epoch milliseconds."""
+    if not value:
+        return None
+
+    try:
+        normalized = value.replace("Z", "+00:00") if value.endswith("Z") else value
+        timestamp = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    else:
+        timestamp = timestamp.astimezone(timezone.utc)
+    return int(timestamp.timestamp() * 1000)
+
+
+def _build_cef_line(
+    signature_id: str,
+    name: str,
+    severity: str,
+    extension_fields: list[tuple[str, object]],
+) -> str:
+    """Build a single Common Event Format line."""
+    header = [
+        "CEF:0",
+        _escape_cef_header("k1n"),
+        _escape_cef_header("dfir-attack-lab"),
+        _escape_cef_header("0.1.0"),
+        _escape_cef_header(signature_id),
+        _escape_cef_header(name),
+        str(_cef_severity(severity)),
+    ]
+    extension = " ".join(
+        f"{key}={_escape_cef_extension(value)}"
+        for key, value in extension_fields
+        if value not in (None, "")
+    )
+    return "|".join(header) + f"|{extension}"
+
+
+def _timeline_entry_to_cef(entry: dict, case_id: str) -> str:
+    """Convert one timeline entry into a CEF log line."""
+    if entry.get("_type") == "gap":
+        extension_fields: list[tuple[str, object]] = [
+            ("deviceExternalId", case_id),
+            ("cat", "timeline_gap"),
+            ("act", "timeline_gap"),
+            ("msg", "No timeline events were observed between adjacent evidence entries."),
+            ("cn1Label", "gapMinutes"),
+            ("cn1", entry.get("duration_minutes")),
+            ("cs1Label", "gapStart"),
+            ("cs1", entry.get("start")),
+            ("cs2Label", "gapEnd"),
+            ("cs2", entry.get("end")),
+        ]
+        if (timestamp_ms := _cef_timestamp_millis(entry.get("end"))) is not None:
+            extension_fields.insert(1, ("rt", timestamp_ms))
+        return _build_cef_line("timeline_gap", "Timeline Gap", "low", extension_fields)
+
+    severity = entry.get("severity", "info")
+    category = entry.get("category", "unknown")
+    action = entry.get("action") or "timeline_event"
+    extension_fields = [
+        ("deviceExternalId", case_id),
+        ("cat", category),
+        ("act", action),
+        ("fname", entry.get("source_file")),
+        ("msg", entry.get("raw")),
+    ]
+    if (timestamp_ms := _cef_timestamp_millis(entry.get("timestamp"))) is not None:
+        extension_fields.append(("rt", timestamp_ms))
+
+    actor = entry.get("actor")
+    if actor:
+        try:
+            ipaddress.ip_address(actor)
+        except ValueError:
+            extension_fields.append(("suser", actor))
+        else:
+            extension_fields.append(("src", actor))
+
+    if entry.get("target"):
+        extension_fields.append(("dhost", entry["target"]))
+    if entry.get("metadata"):
+        extension_fields.extend(
+            [
+                ("cs1Label", "dfirMetadata"),
+                ("cs1", json.dumps(entry["metadata"], sort_keys=True)),
+            ]
+        )
+
+    return _build_cef_line(action, f"{category}:{action}", severity, extension_fields)
+
+
+def _export_cef(timeline: list[dict], path: Path, case_id: str) -> None:
+    """Write Common Event Format lines for SIEM connectors such as Sentinel."""
+    with path.open("w", encoding="utf-8") as fh:
+        for entry in timeline:
+            fh.write(_timeline_entry_to_cef(entry, case_id) + "\n")
 
 
 def _export_json(timeline: list[dict], path: Path, case_id: str) -> None:

@@ -79,8 +79,9 @@ Status: In Progress
 - Output adapters for:
   - Elastic Common Schema (ECS) NDJSON — complete via `k1n-dfir generate-report --format ecs`
     - Maps timeline events, case IDs, actor IP/user context, log source paths, severity, raw evidence, and timeline gaps into ECS-oriented documents
+  - Microsoft Sentinel CEF format — complete via `k1n-dfir generate-report --format cef`
+    - Emits SIEM-friendly Common Event Format lines with case IDs, actor/target context, timestamps, and gap markers
   - Splunk HEC (HTTP Event Collector)
-  - Microsoft Sentinel CEF format
 - Planned live-upload support:
   - Configurable via environment variables in `.env`
   - Batch upload with retry logic and rate limiting

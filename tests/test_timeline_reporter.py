@@ -2,7 +2,7 @@
 Unit tests for timelines/reporter.py
 
 Tests cover filtering (severity, category, time range, gap exclusion),
-summarization, and all four export formats (jsonl, json, html, txt).
+summarization, and timeline exports including JSONL, ECS, CEF, JSON, HTML, CSV, and TXT.
 """
 from __future__ import annotations
 
@@ -302,6 +302,53 @@ class TestExportECS(unittest.TestCase):
         self.assertEqual(len(gap_docs), 1)
         self.assertEqual(gap_docs[0]["event"]["kind"], "state")
         self.assertEqual(gap_docs[0]["dfir"]["gap_minutes"], 240.0)
+
+
+# ---------------------------------------------------------------------------
+# export_timeline — CEF
+# ---------------------------------------------------------------------------
+
+
+class TestExportCEF(unittest.TestCase):
+
+    def test_cef_maps_event_fields_for_siem_import(self):
+        event = _event(
+            1,
+            severity="high",
+            category="authentication",
+            actor="203.0.113.10",
+            action="ssh_login_failure",
+        )
+        tl = _make_timeline(event, gap_threshold=120)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "out.cef"
+            export_timeline(tl, path, fmt="cef", case_id="CASE-CEF-001")
+            line = path.read_text().strip()
+
+        self.assertTrue(
+            line.startswith(
+                "CEF:0|k1n|dfir-attack-lab|0.1.0|ssh_login_failure|authentication:ssh_login_failure|8|"
+            )
+        )
+        self.assertIn("deviceExternalId=CASE-CEF-001", line)
+        self.assertIn("cat=authentication", line)
+        self.assertIn("act=ssh_login_failure", line)
+        self.assertIn("fname=auth.log", line)
+        self.assertIn("src=203.0.113.10", line)
+
+    def test_cef_serializes_timeline_gaps(self):
+        tl = _make_timeline(_event(1), _event(5), gap_threshold=120)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "out.cef"
+            export_timeline(tl, path, fmt="cef", case_id="CASE-CEF-GAP")
+            lines = path.read_text().splitlines()
+
+        gap_lines = [line for line in lines if "|timeline_gap|Timeline Gap|" in line]
+        self.assertEqual(len(gap_lines), 1)
+        self.assertIn("deviceExternalId=CASE-CEF-GAP", gap_lines[0])
+        self.assertIn("cn1Label=gapMinutes", gap_lines[0])
+        self.assertIn("cs1Label=gapStart", gap_lines[0])
+        self.assertIn("cs2Label=gapEnd", gap_lines[0])
 
 
 # ---------------------------------------------------------------------------
