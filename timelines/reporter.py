@@ -256,6 +256,20 @@ def _actor_fields(actor: str | None) -> dict:
     return {"source": {"ip": actor}, "related": {"ip": [actor]}}
 
 
+def _target_host_fields(entry: dict) -> dict:
+    """Only map host context when the event metadata explicitly identifies a host target."""
+    metadata = entry.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+
+    for key in ("target_host", "target_hostname", "hostname", "host", "computer", "destination_host"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.strip():
+            return {"related": {"hosts": [value.strip()]}}
+
+    return {}
+
+
 def _timeline_entry_to_ecs(entry: dict, case_id: str) -> dict:
     """Convert one timeline entry into an ECS-oriented event document."""
     if entry.get("_type") == "gap":
@@ -300,8 +314,9 @@ def _timeline_entry_to_ecs(entry: dict, case_id: str) -> dict:
         "dfir": {"target": entry.get("target"), "metadata": entry.get("metadata", {})},
     }
     doc.update(_actor_fields(entry.get("actor")))
-    if entry.get("target"):
-        doc["related"] = {**doc.get("related", {}), "hosts": [entry["target"]]}
+    target_fields = _target_host_fields(entry)
+    if target_fields:
+        doc["related"] = {**doc.get("related", {}), **target_fields["related"]}
     return doc
 
 

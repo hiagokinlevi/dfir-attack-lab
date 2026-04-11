@@ -303,6 +303,50 @@ class TestExportECS(unittest.TestCase):
         self.assertEqual(gap_docs[0]["event"]["kind"], "state")
         self.assertEqual(gap_docs[0]["dfir"]["gap_minutes"], 240.0)
 
+    def test_ecs_preserves_non_host_targets_without_mapping_them_as_hosts(self):
+        event = TriageEvent(
+            timestamp=_ts(2),
+            source_file="auth.log",
+            category=EventCategory.AUTHENTICATION,
+            severity=SeverityHint.MEDIUM,
+            actor="198.51.100.15",
+            target="root",
+            action="ssh_login_failure",
+            raw="Failed password for root from 198.51.100.15 port 22 ssh2",
+            metadata={"ip": "198.51.100.15", "username": "root"},
+        )
+        tl = _make_timeline(event, gap_threshold=120)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "out.ecs.ndjson"
+            export_timeline(tl, path, fmt="ecs", case_id="CASE-NON-HOST")
+            docs = [json.loads(line) for line in path.read_text().splitlines()]
+
+        self.assertEqual(docs[0]["dfir"]["target"], "root")
+        self.assertEqual(docs[0]["dfir"]["metadata"]["username"], "root")
+        self.assertEqual(docs[0]["related"]["ip"], ["198.51.100.15"])
+        self.assertNotIn("hosts", docs[0]["related"])
+
+    def test_ecs_maps_explicit_target_host_metadata_to_related_hosts(self):
+        event = TriageEvent(
+            timestamp=_ts(3),
+            source_file="lateral-movement.json",
+            category=EventCategory.NETWORK,
+            severity=SeverityHint.HIGH,
+            actor="198.51.100.20",
+            target="server01",
+            action="remote_service_execution",
+            raw="Remote service execution from 198.51.100.20 to server01",
+            metadata={"target_host": "server01", "protocol": "smb"},
+        )
+        tl = _make_timeline(event, gap_threshold=120)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "out.ecs.ndjson"
+            export_timeline(tl, path, fmt="ecs", case_id="CASE-HOST")
+            docs = [json.loads(line) for line in path.read_text().splitlines()]
+
+        self.assertEqual(docs[0]["dfir"]["target"], "server01")
+        self.assertEqual(docs[0]["related"]["hosts"], ["server01"])
+
 
 # ---------------------------------------------------------------------------
 # export_timeline — CEF
