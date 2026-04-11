@@ -27,6 +27,7 @@ from analyzers.network_conn_analyzer import (
     NetConnSeverity,
     NetworkConnectionAnalyzer,
     _CHECK_WEIGHTS,
+    _is_internal_address,
     _is_rfc1918,
     _shannon_entropy,
     _conn_evidence,
@@ -199,6 +200,33 @@ class TestIsRfc1918:
 
     def test_empty_string(self):
         assert _is_rfc1918("") is False
+
+
+# ---------------------------------------------------------------------------
+# Section 4 — _is_internal_address helper
+# ---------------------------------------------------------------------------
+
+class TestIsInternalAddress:
+    def test_rfc1918_ipv4(self):
+        assert _is_internal_address("10.42.0.8") is True
+
+    def test_ipv6_ula(self):
+        assert _is_internal_address("fd12:3456:789a::5") is True
+
+    def test_ipv6_link_local(self):
+        assert _is_internal_address("fe80::1234") is True
+
+    def test_ipv4_mapped_private_ipv6(self):
+        assert _is_internal_address("::ffff:192.168.1.25") is True
+
+    def test_public_ipv6(self):
+        assert _is_internal_address("2001:4860:4860::8888") is False
+
+    def test_ipv6_loopback_not_internal(self):
+        assert _is_internal_address("::1") is False
+
+    def test_invalid_address(self):
+        assert _is_internal_address("not-an-ip") is False
 
 
 # ---------------------------------------------------------------------------
@@ -581,9 +609,24 @@ class TestNC007:
         report = analyzer().analyze([rec])
         assert any(f.check_id == "NC-007" for f in report.findings)
 
+    def test_fires_for_smb_to_ipv6_ula(self):
+        rec = make_record(remote_port=445, remote_addr="fd12:3456:789a::10", state="ESTABLISHED")
+        report = analyzer().analyze([rec])
+        assert any(f.check_id == "NC-007" for f in report.findings)
+
+    def test_fires_for_rdp_to_ipv4_mapped_private_ipv6(self):
+        rec = make_record(remote_port=3389, remote_addr="::ffff:10.10.20.30", state="ESTABLISHED")
+        report = analyzer().analyze([rec])
+        assert any(f.check_id == "NC-007" for f in report.findings)
+
     def test_does_not_fire_for_smb_to_public(self):
         # SMB to a public IP is suspicious but not NC-007 specifically.
         rec = make_record(remote_port=445, remote_addr="8.8.8.8", state="ESTABLISHED")
+        report = analyzer().analyze([rec])
+        assert not any(f.check_id == "NC-007" for f in report.findings)
+
+    def test_does_not_fire_for_public_ipv6(self):
+        rec = make_record(remote_port=445, remote_addr="2001:4860:4860::8888", state="ESTABLISHED")
         report = analyzer().analyze([rec])
         assert not any(f.check_id == "NC-007" for f in report.findings)
 

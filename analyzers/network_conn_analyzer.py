@@ -16,7 +16,7 @@ NC-003   High-entropy destination hostname (possible DGA/DNS tunnel)
 NC-004   Connection to known crypto-mining pool port (3333/4444/5555/7777/14433/14444/45560/45700)
 NC-005   Outbound connection to Tor default port (9001/9050)
 NC-006   Unusually high number of LISTENING ports for process
-NC-007   Internal lateral movement: connection to SMB/WinRM/RDP ports on internal RFC1918 addresses
+NC-007   Internal lateral movement: connection to SMB/WinRM/RDP ports on internal private addresses
 
 Usage::
 
@@ -46,6 +46,7 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
+from ipaddress import IPv6Address, ip_address, ip_network
 from typing import Any, Dict, List, Optional
 
 
@@ -93,6 +94,11 @@ _LATERAL_MOVEMENT_PORTS: frozenset = frozenset({
     5986,   # WinRM HTTPS
     3389,   # RDP
 })
+
+_IPV6_INTERNAL_NETWORKS = (
+    ip_network("fc00::/7"),   # Unique local addresses (ULA)
+    ip_network("fe80::/10"),  # Link-local addresses
+)
 
 # Risk weight per check ID.  Summed across unique fired check IDs, capped at 100.
 _CHECK_WEIGHTS: Dict[str, int] = {
@@ -319,6 +325,33 @@ def _is_rfc1918(addr: str) -> bool:
     return False
 
 
+def _is_internal_address(addr: str) -> bool:
+    """
+    Return True when *addr* is an internal private address used for east-west traffic.
+
+    Supported ranges:
+      - IPv4 RFC1918: 10/8, 172.16/12, 192.168/16
+      - IPv6 ULA:     fc00::/7
+      - IPv6 link-local: fe80::/10
+      - IPv4-mapped IPv6 when the embedded IPv4 address is RFC1918
+    """
+    if _is_rfc1918(addr):
+        return True
+
+    if not addr or ":" not in addr:
+        return False
+
+    try:
+        parsed = ip_address(addr)
+    except ValueError:
+        return False
+
+    if isinstance(parsed, IPv6Address) and parsed.ipv4_mapped is not None:
+        return _is_rfc1918(str(parsed.ipv4_mapped))
+
+    return any(parsed in network for network in _IPV6_INTERNAL_NETWORKS)
+
+
 def _shannon_entropy(s: str) -> float:
     """
     Compute the Shannon entropy (bits) of string *s*.
@@ -428,7 +461,7 @@ class NetworkConnectionAnalyzer:
                 self._check_lateral_movement
                 and rec.state == "ESTABLISHED"
                 and rec.remote_port in _LATERAL_MOVEMENT_PORTS
-                and _is_rfc1918(rec.remote_addr)
+                and _is_internal_address(rec.remote_addr)
             ):
                 findings.append(self._make_nc007(rec))
 
@@ -657,7 +690,7 @@ class NetworkConnectionAnalyzer:
             ),
             detail=(
                 f"Process '{rec.process_name}' (pid={rec.pid}) has an ESTABLISHED "
-                f"{proto_label} connection to internal RFC1918 address "
+                f"{proto_label} connection to internal private address "
                 f"{rec.remote_addr}:{rec.remote_port}. This is a common indicator "
                 f"of adversary lateral movement within the network."
             ),
