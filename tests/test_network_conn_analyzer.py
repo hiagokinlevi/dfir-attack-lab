@@ -28,6 +28,7 @@ from analyzers.network_conn_analyzer import (
     NetworkConnectionAnalyzer,
     _CHECK_WEIGHTS,
     _is_internal_address,
+    _normalize_ip_literal,
     _is_rfc1918,
     _shannon_entropy,
     _conn_evidence,
@@ -230,7 +231,19 @@ class TestIsInternalAddress:
 
 
 # ---------------------------------------------------------------------------
-# Section 4 — _shannon_entropy helper
+# Section 4b — _normalize_ip_literal helper
+# ---------------------------------------------------------------------------
+
+class TestNormalizeIpLiteral:
+    def test_strips_ipv6_brackets(self):
+        assert _normalize_ip_literal("[fe80::1234%en0]") == "fe80::1234%en0"
+
+    def test_strips_whitespace(self):
+        assert _normalize_ip_literal(" 10.0.0.5 ") == "10.0.0.5"
+
+
+# ---------------------------------------------------------------------------
+# Section 5 — _shannon_entropy helper
 # ---------------------------------------------------------------------------
 
 class TestShannonEntropy:
@@ -616,6 +629,16 @@ class TestNC007:
 
     def test_fires_for_rdp_to_ipv4_mapped_private_ipv6(self):
         rec = make_record(remote_port=3389, remote_addr="::ffff:10.10.20.30", state="ESTABLISHED")
+        report = analyzer().analyze([rec])
+        assert any(f.check_id == "NC-007" for f in report.findings)
+
+    def test_fires_for_rdp_to_bracketed_ipv6_link_local(self):
+        rec = make_record(remote_port=3389, remote_addr="[fe80::1234%en0]", state="ESTABLISHED")
+        report = analyzer().analyze([rec])
+        assert any(f.check_id == "NC-007" for f in report.findings)
+
+    def test_fires_for_winrm_to_bracketed_ipv4_mapped_private_ipv6(self):
+        rec = make_record(remote_port=5985, remote_addr="[::ffff:192.168.1.25]", state="ESTABLISHED")
         report = analyzer().analyze([rec])
         assert any(f.check_id == "NC-007" for f in report.findings)
 

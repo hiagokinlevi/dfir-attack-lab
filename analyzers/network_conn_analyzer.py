@@ -325,6 +325,21 @@ def _is_rfc1918(addr: str) -> bool:
     return False
 
 
+def _normalize_ip_literal(addr: str) -> str:
+    """
+    Normalize common socket-tool address decorations before IP parsing.
+
+    Examples:
+      - ``[fe80::1%en0]`` -> ``fe80::1%en0``
+      - ``[::ffff:192.168.1.25]`` -> ``::ffff:192.168.1.25``
+      - `` 10.0.0.5 `` -> ``10.0.0.5``
+    """
+    normalized = addr.strip()
+    if normalized.startswith("[") and normalized.endswith("]"):
+        normalized = normalized[1:-1]
+    return normalized
+
+
 def _is_internal_address(addr: str) -> bool:
     """
     Return True when *addr* is an internal private address used for east-west traffic.
@@ -335,6 +350,7 @@ def _is_internal_address(addr: str) -> bool:
       - IPv6 link-local: fe80::/10
       - IPv4-mapped IPv6 when the embedded IPv4 address is RFC1918
     """
+    addr = _normalize_ip_literal(addr)
     if _is_rfc1918(addr):
         return True
 
