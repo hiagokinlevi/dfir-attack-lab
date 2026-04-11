@@ -22,6 +22,15 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _is_within_directory(path: Path, directory: Path) -> bool:
+    """Return True when path resolves under directory."""
+    try:
+        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
+        return True
+    except ValueError:
+        return False
+
+
 def package_case(
     source_files: list[Path],
     case_id: str,
@@ -97,9 +106,19 @@ def verify_case(manifest_path: Path) -> list[dict]:
     """
     manifest = json.loads(manifest_path.read_text())
     results: list[dict] = []
+    artifacts_dir = manifest_path.parent / "artifacts"
 
     for entry in manifest.get("artifacts", []):
         path = Path(entry["case_path"])
+        if not _is_within_directory(path, artifacts_dir):
+            results.append({
+                "filename": entry["filename"],
+                "expected_sha256": entry["sha256"],
+                "actual_sha256": "INVALID_CASE_PATH",
+                "ok": False,
+            })
+            continue
+
         if not path.exists():
             results.append({
                 "filename": entry["filename"],

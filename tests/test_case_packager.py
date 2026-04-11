@@ -55,3 +55,22 @@ def test_verify_detects_tampering():
 
         results = verify_case(manifest_path)
         assert results[0]["ok"] is False
+
+
+def test_verify_rejects_case_paths_outside_artifacts_directory():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        artifact = Path(tmpdir) / "data.jsonl"
+        artifact.write_text("original content\n")
+        external = Path(tmpdir) / "external.jsonl"
+        external.write_text("external content\n")
+
+        output_dir = Path(tmpdir) / "cases"
+        manifest_path = package_case([artifact], "CASE-004", output_dir)
+
+        manifest = json.loads(manifest_path.read_text())
+        manifest["artifacts"][0]["case_path"] = str(external)
+        manifest_path.write_text(json.dumps(manifest, indent=2))
+
+        results = verify_case(manifest_path)
+        assert results[0]["actual_sha256"] == "INVALID_CASE_PATH"
+        assert results[0]["ok"] is False
