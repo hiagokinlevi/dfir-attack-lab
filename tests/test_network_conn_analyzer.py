@@ -332,6 +332,17 @@ class TestNC002:
         nc002 = [f for f in report.findings if f.check_id == "NC-002"][0]
         assert nc002.severity == NetConnSeverity.HIGH
 
+    def test_same_process_name_different_pids_are_not_merged(self):
+        records = [
+            make_record(pid=2001, process_name="python3", remote_addr=f"1.2.3.{i + 1}")
+            for i in range(11)
+        ] + [
+            make_record(pid=2002, process_name="python3", remote_addr=f"5.6.7.{i + 1}")
+            for i in range(11)
+        ]
+        report = analyzer().analyze(records)
+        assert not any(f.check_id == "NC-002" for f in report.findings)
+
     def test_listen_state_not_counted_for_nc002(self):
         # LISTEN state should not count as outbound ESTABLISHED.
         records = [
@@ -504,6 +515,31 @@ class TestNC006:
         report = analyzer().analyze(records)
         nc006 = [f for f in report.findings if f.check_id == "NC-006"][0]
         assert nc006.severity == NetConnSeverity.MEDIUM
+
+    def test_same_process_name_different_pids_are_not_merged(self):
+        records = [
+            make_record(
+                pid=4001,
+                process_name="svc",
+                local_port=20000 + i,
+                state="LISTEN",
+                remote_addr="",
+                remote_port=0,
+            )
+            for i in range(3)
+        ] + [
+            make_record(
+                pid=4002,
+                process_name="svc",
+                local_port=21000 + i,
+                state="LISTEN",
+                remote_addr="",
+                remote_port=0,
+            )
+            for i in range(3)
+        ]
+        report = analyzer().analyze(records)
+        assert not any(f.check_id == "NC-006" for f in report.findings)
 
     def test_established_not_counted_for_nc006(self):
         # ESTABLISHED state should not count toward LISTEN threshold.

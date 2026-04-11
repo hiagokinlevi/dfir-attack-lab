@@ -396,11 +396,10 @@ class NetworkConnectionAnalyzer:
         """
         findings: List[NetConnFinding] = []
 
-        # Accumulators for aggregate checks.
-        # outbound_counts[process_name] → list of (pid, record) for ESTABLISHED outbound
-        outbound_map: Dict[str, List[ConnectionRecord]] = defaultdict(list)
-        # listen_counts[process_name] → list of (pid, record) for LISTEN state
-        listen_map: Dict[str, List[ConnectionRecord]] = defaultdict(list)
+        # Accumulators for aggregate checks keyed by PID + process name so
+        # separate processes that share the same executable name are not merged.
+        outbound_map: Dict[tuple[int, str], List[ConnectionRecord]] = defaultdict(list)
+        listen_map: Dict[tuple[int, str], List[ConnectionRecord]] = defaultdict(list)
 
         # ------------------------------------------------------------------
         # Per-connection checks
@@ -435,21 +434,19 @@ class NetworkConnectionAnalyzer:
 
             # Accumulate for aggregate checks.
             if rec.state == "ESTABLISHED":
-                outbound_map[rec.process_name].append(rec)
+                outbound_map[(rec.pid, rec.process_name)].append(rec)
             if rec.state == "LISTEN":
-                listen_map[rec.process_name].append(rec)
+                listen_map[(rec.pid, rec.process_name)].append(rec)
 
         # ------------------------------------------------------------------
         # NC-002: excessive outbound connections per process
         # ------------------------------------------------------------------
-        for process_name, conn_list in outbound_map.items():
+        for (pid, process_name), conn_list in outbound_map.items():
             if len(conn_list) > self._excessive_outbound_threshold:
-                # Use the PID of the first record (consistent within a process).
-                representative_pid = conn_list[0].pid
                 findings.append(
                     self._make_nc002(
                         process_name=process_name,
-                        pid=representative_pid,
+                        pid=pid,
                         count=len(conn_list),
                         threshold=self._excessive_outbound_threshold,
                     )
@@ -458,14 +455,13 @@ class NetworkConnectionAnalyzer:
         # ------------------------------------------------------------------
         # NC-006: unusually high number of LISTEN ports per process
         # ------------------------------------------------------------------
-        for process_name, listen_list in listen_map.items():
+        for (pid, process_name), listen_list in listen_map.items():
             if len(listen_list) > _LISTEN_PORT_THRESHOLD:
-                representative_pid = listen_list[0].pid
                 ports = sorted({r.local_port for r in listen_list})
                 findings.append(
                     self._make_nc006(
                         process_name=process_name,
-                        pid=representative_pid,
+                        pid=pid,
                         count=len(listen_list),
                         ports=ports,
                     )
