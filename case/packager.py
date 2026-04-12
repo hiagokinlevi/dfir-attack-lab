@@ -12,6 +12,8 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
+from normalizers.case_id import validate_case_id
+
 
 def _sha256(path: Path) -> str:
     """Compute SHA-256 hash of a file."""
@@ -29,16 +31,6 @@ def _is_within_directory(path: Path, directory: Path) -> bool:
         return True
     except ValueError:
         return False
-
-
-def _validate_case_id(case_id: str) -> str:
-    """Reject empty or path-like case identifiers before writing files."""
-    normalized = case_id.strip()
-    if not normalized:
-        raise ValueError("case_id must not be empty")
-    if normalized in {".", ".."} or "/" in normalized or "\\" in normalized:
-        raise ValueError("case_id must be a single non-relative path segment")
-    return normalized
 
 
 def package_case(
@@ -65,7 +57,8 @@ def package_case(
     Returns:
         Path to the written case manifest JSON file.
     """
-    case_dir = output_dir / _validate_case_id(case_id)
+    case_id = validate_case_id(case_id)
+    case_dir = output_dir / case_id
     artifacts_dir = case_dir / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 

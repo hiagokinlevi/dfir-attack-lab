@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from normalizers.case_id import validate_case_id
+
 
 def _run_powershell(command: str, timeout: int = 30) -> Optional[str]:
     """
@@ -59,6 +61,7 @@ def run_windows_triage(output_dir: Path, case_id: str) -> Path:
     Returns:
         Path to the written JSONL output file.
     """
+    case_id = validate_case_id(case_id)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{case_id}_windows_triage.jsonl"
     collected_at = datetime.now(timezone.utc).isoformat()

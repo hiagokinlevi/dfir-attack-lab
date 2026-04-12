@@ -65,6 +65,17 @@ class TestCollectionCommands(unittest.TestCase):
         mocked.assert_called_once()
         self.assertIn("Triage complete", result.output)
 
+    def test_collect_commands_reject_path_like_case_ids(self):
+        for command in ("collect-linux", "collect-windows", "collect-macos"):
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as tmpdir:
+                result = self.runner.invoke(
+                    cli,
+                    [command, "--output-dir", tmpdir, "--case-id", "../CASE-CLI"],
+                )
+
+            self.assertNotEqual(result.exit_code, 0)
+            self.assertIn("single non-relative path segment", result.output)
+
     def test_parse_macos_unified_log_writes_output(self):
         parsed_event = _event(5).model_dump(mode="json")
         with tempfile.TemporaryDirectory() as tmpdir:

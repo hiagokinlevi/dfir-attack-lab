@@ -31,6 +31,7 @@ from collectors.linux.triage import run_linux_triage
 from collectors.macos.triage import run_macos_triage
 from collectors.windows.triage import run_windows_triage
 from analyzers.process_tree_analyzer import ProcessNode, ProcessTreeAnalyzer, PTSeverity
+from normalizers.case_id import validate_case_id
 from parsers.authlog import parse_authlog
 from parsers.macos_unified_log import parse_macos_unified_log
 from timelines.builder import build_timeline
@@ -96,6 +97,18 @@ def _load_process_nodes(path: Path) -> list[ProcessNode]:
     return nodes
 
 
+def _click_validate_case_id(
+    _ctx: click.Context,
+    _param: click.Parameter,
+    value: str,
+) -> str:
+    """Normalize case IDs at the CLI boundary before file-writing commands run."""
+    try:
+        return validate_case_id(value)
+    except ValueError as exc:
+        raise click.BadParameter(str(exc)) from exc
+
+
 @click.group()
 def cli() -> None:
     """k1n DFIR Attack Lab — incident triage and timeline toolkit."""
@@ -103,7 +116,12 @@ def cli() -> None:
 
 @cli.command()
 @click.option("--output-dir", default="/tmp/dfir-output", show_default=True, help="Directory for triage output")
-@click.option("--case-id", required=True, help="Unique case identifier")
+@click.option(
+    "--case-id",
+    required=True,
+    callback=_click_validate_case_id,
+    help="Unique case identifier (single non-relative path segment)",
+)
 def collect_linux(output_dir: str, case_id: str) -> None:
     """Run read-only Linux system triage and write observations to JSONL."""
     path = run_linux_triage(Path(output_dir), case_id)
@@ -112,7 +130,12 @@ def collect_linux(output_dir: str, case_id: str) -> None:
 
 @cli.command()
 @click.option("--output-dir", default="/tmp/dfir-output", show_default=True, help="Directory for triage output")
-@click.option("--case-id", required=True, help="Unique case identifier")
+@click.option(
+    "--case-id",
+    required=True,
+    callback=_click_validate_case_id,
+    help="Unique case identifier (single non-relative path segment)",
+)
 def collect_windows(output_dir: str, case_id: str) -> None:
     """Run read-only Windows system triage and write observations to JSONL."""
     path = run_windows_triage(Path(output_dir), case_id)
@@ -121,7 +144,12 @@ def collect_windows(output_dir: str, case_id: str) -> None:
 
 @cli.command()
 @click.option("--output-dir", default="/tmp/dfir-output", show_default=True, help="Directory for triage output")
-@click.option("--case-id", required=True, help="Unique case identifier")
+@click.option(
+    "--case-id",
+    required=True,
+    callback=_click_validate_case_id,
+    help="Unique case identifier (single non-relative path segment)",
+)
 def collect_macos(output_dir: str, case_id: str) -> None:
     """Run read-only macOS system triage and write observations to JSONL."""
     path = run_macos_triage(Path(output_dir), case_id)
