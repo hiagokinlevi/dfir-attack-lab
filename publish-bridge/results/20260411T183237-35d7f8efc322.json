@@ -1,0 +1,13 @@
+{
+  "finished_at_utc": "2026-04-11T21:33:00Z",
+  "head_commit": "da1a2d811ac39391d04f8963964cc2f5d48f72a4",
+  "remote_main": "da1a2d811ac39391d04f8963964cc2f5d48f72a4\trefs/heads/main",
+  "remote_main_before": "fc447d426c816542f0ec1210df3f58851bc67070\trefs/heads/main",
+  "repo_path": "/Users/hiagokin/dfir-attack-lab",
+  "request_id": "20260411T183237-35d7f8efc322",
+  "started_at_utc": "2026-04-11T21:32:57Z",
+  "status": "success",
+  "stderr": "To https://github.com/hiagokinlevi/dfir-attack-lab.git\n   fc447d4..da1a2d8  HEAD -> main\n",
+  "stdout": "",
+  "summary": "Harden case manifest verification"
+}

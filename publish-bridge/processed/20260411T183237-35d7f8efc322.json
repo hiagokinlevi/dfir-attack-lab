@@ -1,0 +1,15 @@
+{
+  "automation_id": "cyber-detection-lane",
+  "created_at_utc": "2026-04-11T21:32:37Z",
+  "head_commit": "da1a2d811ac39391d04f8963964cc2f5d48f72a4",
+  "local_branch": "main",
+  "origin_url": "https://github.com/hiagokinlevi/dfir-attack-lab.git",
+  "owner": "hiagokinlevi",
+  "publish_mode": "direct-main",
+  "publisher_root": "/Users/hiagokin/dfir-attack-lab/publish-bridge",
+  "repo_name": "dfir-attack-lab",
+  "repo_path": "/Users/hiagokin/dfir-attack-lab",
+  "request_id": "20260411T183237-35d7f8efc322",
+  "summary": "Harden case manifest verification",
+  "target_ref": "main"
+}

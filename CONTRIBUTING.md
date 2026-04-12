@@ -80,4 +80,4 @@ If you want to add a collector for a new platform:
 
 ## Questions
 
-Open a GitHub Discussion or contact security@hiagokinlevi.dev.
+Open a GitHub Discussion or contact hiagokinlevi@protonmail.com.

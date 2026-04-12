@@ -1,0 +1,13 @@
+{
+  "finished_at_utc": "2026-04-11T21:31:28Z",
+  "head_commit": "fc447d426c816542f0ec1210df3f58851bc67070",
+  "remote_main": "fc447d426c816542f0ec1210df3f58851bc67070\trefs/heads/main",
+  "remote_main_before": "7a692d656850cd34d4e93a4b1d51571b8a7ade55\trefs/heads/main",
+  "repo_path": "/Users/hiagokin/dfir-attack-lab",
+  "request_id": "20260411T183106-c3f24372eaad",
+  "started_at_utc": "2026-04-11T21:31:26Z",
+  "status": "success",
+  "stderr": "To https://github.com/hiagokinlevi/dfir-attack-lab.git\n   7a692d6..fc447d4  HEAD -> main\n",
+  "stdout": "",
+  "summary": "Handle bracketed IPv6 admin targets"
+}

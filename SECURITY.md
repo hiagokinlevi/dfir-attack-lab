@@ -11,7 +11,7 @@
 If you discover a security vulnerability in this project, please follow responsible disclosure:
 
 1. **Do not open a public GitHub Issue.** Public disclosure before a fix is available can put users at risk.
-2. Send a detailed report to: **security@hiagokinlevi.dev**
+2. Send a detailed report to: **hiagokinlevi@protonmail.com**
 3. Include in your report:
    - A description of the vulnerability
    - Steps to reproduce

@@ -31,6 +31,16 @@ def _is_within_directory(path: Path, directory: Path) -> bool:
         return False
 
 
+def _validate_case_id(case_id: str) -> str:
+    """Reject empty or path-like case identifiers before writing files."""
+    normalized = case_id.strip()
+    if not normalized:
+        raise ValueError("case_id must not be empty")
+    if normalized in {".", ".."} or "/" in normalized or "\\" in normalized:
+        raise ValueError("case_id must be a single non-relative path segment")
+    return normalized
+
+
 def package_case(
     source_files: list[Path],
     case_id: str,
@@ -55,7 +65,7 @@ def package_case(
     Returns:
         Path to the written case manifest JSON file.
     """
-    case_dir = output_dir / case_id
+    case_dir = output_dir / _validate_case_id(case_id)
     artifacts_dir = case_dir / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 

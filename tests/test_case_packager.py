@@ -74,3 +74,33 @@ def test_verify_rejects_case_paths_outside_artifacts_directory():
         results = verify_case(manifest_path)
         assert results[0]["actual_sha256"] == "INVALID_CASE_PATH"
         assert results[0]["ok"] is False
+
+
+def test_package_rejects_relative_case_id_segments():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        artifact = Path(tmpdir) / "triage.jsonl"
+        artifact.write_text('{"case_id": "TEST"}\n')
+
+        output_dir = Path(tmpdir) / "cases"
+
+        try:
+            package_case([artifact], "../CASE-005", output_dir)
+        except ValueError as exc:
+            assert "single non-relative path segment" in str(exc)
+        else:
+            raise AssertionError("package_case() should reject relative path segments in case_id")
+
+
+def test_package_rejects_absolute_like_case_id():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        artifact = Path(tmpdir) / "triage.jsonl"
+        artifact.write_text('{"case_id": "TEST"}\n')
+
+        output_dir = Path(tmpdir) / "cases"
+
+        try:
+            package_case([artifact], "nested/case", output_dir)
+        except ValueError as exc:
+            assert "single non-relative path segment" in str(exc)
+        else:
+            raise AssertionError("package_case() should reject path separators in case_id")

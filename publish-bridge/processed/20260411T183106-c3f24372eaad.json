@@ -1,0 +1,15 @@
+{
+  "automation_id": "cyber-detection-lane",
+  "created_at_utc": "2026-04-11T21:31:06Z",
+  "head_commit": "fc447d426c816542f0ec1210df3f58851bc67070",
+  "local_branch": "main",
+  "origin_url": "https://github.com/hiagokinlevi/dfir-attack-lab.git",
+  "owner": "hiagokinlevi",
+  "publish_mode": "direct-main",
+  "publisher_root": "/Users/hiagokin/dfir-attack-lab/publish-bridge",
+  "repo_name": "dfir-attack-lab",
+  "repo_path": "/Users/hiagokin/dfir-attack-lab",
+  "request_id": "20260411T183106-c3f24372eaad",
+  "summary": "Handle bracketed IPv6 admin targets",
+  "target_ref": "main"
+}
