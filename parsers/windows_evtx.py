@@ -18,7 +18,7 @@ Supported Event IDs:
 from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from normalizers.models import EventCategory, SeverityHint, TriageEvent
 
@@ -47,6 +47,18 @@ def _get_data(event_data: ET.Element | None, name: str) -> str:
         if item.get("Name") == name:
             return item.text or ""
     return ""
+
+
+def _parse_system_time(system: ET.Element) -> datetime | None:
+    """Return the event timestamp or None when SystemTime is missing or invalid."""
+    time_elem = system.find("w:TimeCreated", _NS)
+    ts_str = time_elem.get("SystemTime", "") if time_elem is not None else ""
+    if not ts_str:
+        return None
+    try:
+        return datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def parse_windows_xml(xml_path: Path) -> list[TriageEvent]:
@@ -90,14 +102,9 @@ def parse_windows_xml(xml_path: Path) -> list[TriageEvent]:
         except ValueError:
             continue
 
-        # Parse timestamp
-        time_elem = system.find("w:TimeCreated", _NS)
-        ts_str = time_elem.get("SystemTime", "") if time_elem is not None else ""
-        try:
-            # Windows timestamps: "2026-04-06T12:00:00.000000Z"
-            ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
-        except ValueError:
-            ts = datetime.now(timezone.utc)
+        ts = _parse_system_time(system)
+        if ts is None:
+            continue
 
         event_data = elem.find("w:EventData", _NS)
         category, severity, action = _EVENT_MAP.get(

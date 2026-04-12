@@ -1,0 +1,14 @@
+{
+  "error": "git push origin HEAD:main failed",
+  "finished_at_utc": "2026-04-12T00:13:21Z",
+  "head_commit": "c12f180663ea57cab7d6be6e4ea14c1f585e0d91",
+  "remote_main": "f365d8a712595760dc3a5df499da3998d13ca663\trefs/heads/main",
+  "remote_main_before": "f365d8a712595760dc3a5df499da3998d13ca663\trefs/heads/main",
+  "repo_path": "/Users/hiagokin/dfir-attack-lab",
+  "request_id": "20260411T211310-514eebc9a078",
+  "started_at_utc": "2026-04-12T00:13:19Z",
+  "status": "failed",
+  "stderr": "To https://github.com/hiagokinlevi/dfir-attack-lab.git\n ! [rejected]        HEAD -> main (fetch first)\nerror: failed to push some refs to 'https://github.com/hiagokinlevi/dfir-attack-lab.git'\nhint: Updates were rejected because the remote contains work that you do not\nhint: have locally. This is usually caused by another repository pushing to\nhint: the same ref. If you want to integrate the remote changes, use\nhint: 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.\n",
+  "stdout": "",
+  "summary": "Reject path-like case IDs"
+}

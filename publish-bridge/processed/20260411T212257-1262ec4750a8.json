@@ -1,0 +1,15 @@
+{
+  "automation_id": "cyber-detection-lane",
+  "created_at_utc": "2026-04-12T00:22:57Z",
+  "head_commit": "cb8e41ea20523d242c68592074559b815d5c6a67",
+  "local_branch": "main",
+  "origin_url": "https://github.com/hiagokinlevi/dfir-attack-lab.git",
+  "owner": "hiagokinlevi",
+  "publish_mode": "direct-main",
+  "publisher_root": "/Users/hiagokin/dfir-attack-lab/publish-bridge",
+  "repo_name": "dfir-attack-lab",
+  "repo_path": "/Users/hiagokin/dfir-attack-lab",
+  "request_id": "20260411T212257-1262ec4750a8",
+  "summary": "Reject path-like case IDs",
+  "target_ref": "main"
+}

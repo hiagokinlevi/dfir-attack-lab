@@ -38,6 +38,35 @@ _SERVICE_INSTALL_XML = """\
 </Events>
 """
 
+_INVALID_TIMESTAMP_XML = """\
+<Events xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <Event>
+    <System>
+      <EventID>4624</EventID>
+      <TimeCreated SystemTime="not-a-timestamp"/>
+    </System>
+    <EventData>
+      <Data Name="TargetUserName">Analyst</Data>
+      <Data Name="IpAddress">10.0.0.8</Data>
+    </EventData>
+  </Event>
+</Events>
+"""
+
+_MISSING_TIMESTAMP_XML = """\
+<Events xmlns="http://schemas.microsoft.com/win/2004/08/events/event">
+  <Event>
+    <System>
+      <EventID>4624</EventID>
+    </System>
+    <EventData>
+      <Data Name="TargetUserName">Analyst</Data>
+      <Data Name="IpAddress">10.0.0.8</Data>
+    </EventData>
+  </Event>
+</Events>
+"""
+
 
 def _write_xml(content: str) -> Path:
     f = tempfile.NamedTemporaryFile(mode="w", suffix=".xml", delete=False)
@@ -72,5 +101,17 @@ def test_service_install_parsed():
 
 def test_invalid_xml_returns_empty():
     path = _write_xml("<not valid xml><<<")
+    events = parse_windows_xml(path)
+    assert events == []
+
+
+def test_invalid_timestamp_event_is_skipped():
+    path = _write_xml(_INVALID_TIMESTAMP_XML)
+    events = parse_windows_xml(path)
+    assert events == []
+
+
+def test_missing_timestamp_event_is_skipped():
+    path = _write_xml(_MISSING_TIMESTAMP_XML)
     events = parse_windows_xml(path)
     assert events == []

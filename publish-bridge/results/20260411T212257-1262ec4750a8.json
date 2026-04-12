@@ -1,0 +1,13 @@
+{
+  "finished_at_utc": "2026-04-12T00:23:03Z",
+  "head_commit": "cb8e41ea20523d242c68592074559b815d5c6a67",
+  "remote_main": "cb8e41ea20523d242c68592074559b815d5c6a67\trefs/heads/main",
+  "remote_main_before": "f365d8a712595760dc3a5df499da3998d13ca663\trefs/heads/main",
+  "repo_path": "/Users/hiagokin/dfir-attack-lab",
+  "request_id": "20260411T212257-1262ec4750a8",
+  "started_at_utc": "2026-04-12T00:23:01Z",
+  "status": "success",
+  "stderr": "To https://github.com/hiagokinlevi/dfir-attack-lab.git\n   f365d8a..cb8e41e  HEAD -> main\n",
+  "stdout": "",
+  "summary": "Reject path-like case IDs"
+}
