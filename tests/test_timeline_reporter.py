@@ -455,6 +455,28 @@ class TestExportHTML(unittest.TestCase):
             content = path.read_text()
         self.assertIn("GAP", content)
 
+    def test_html_escapes_attacker_controlled_text(self):
+        event = TriageEvent(
+            timestamp=_ts(1),
+            source_file="auth.log",
+            category=EventCategory.AUTHENTICATION,
+            severity=SeverityHint.HIGH,
+            actor="<admin&ops>",
+            action='login"<script>"',
+            raw='<script>alert("x")</script>&',
+        )
+        tl = _make_timeline(event, gap_threshold=0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "report.html"
+            export_timeline(tl, path, fmt="html", case_id='INC-<2026>&"1"')
+            content = path.read_text()
+
+        self.assertIn("INC-&lt;2026&gt;&amp;&quot;1&quot;", content)
+        self.assertIn("&lt;admin&amp;ops&gt;", content)
+        self.assertIn("login&quot;&lt;script&gt;&quot;", content)
+        self.assertIn("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;&amp;", content)
+        self.assertNotIn('<script>alert("x")</script>', content)
+
 
 # ---------------------------------------------------------------------------
 # export_timeline — CSV
@@ -486,6 +508,29 @@ class TestExportCSV(unittest.TestCase):
         gap_rows = [row for row in rows if row["entry_type"] == "gap"]
         self.assertEqual(len(gap_rows), 1)
         self.assertIn("240.0", gap_rows[0]["duration_minutes"])
+
+    def test_csv_neutralizes_formula_like_cells(self):
+        event = TriageEvent(
+            timestamp=_ts(2),
+            source_file="auth.log",
+            category=EventCategory.AUTHENTICATION,
+            severity=SeverityHint.MEDIUM,
+            actor=" =SUM(1,1)",
+            target="@finance-share",
+            action="-cmd",
+            raw="+HYPERLINK(\"https://attacker.invalid\")",
+        )
+        tl = _make_timeline(event, gap_threshold=0)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "out.csv"
+            export_timeline(tl, path, fmt="csv")
+            with path.open("r", encoding="utf-8", newline="") as fh:
+                rows = list(csv.DictReader(fh))
+
+        self.assertEqual(rows[0]["actor"], "' =SUM(1,1)")
+        self.assertEqual(rows[0]["target"], "'@finance-share")
+        self.assertEqual(rows[0]["action"], "'-cmd")
+        self.assertEqual(rows[0]["raw"], "'+HYPERLINK(\"https://attacker.invalid\")")
 
 
 # ---------------------------------------------------------------------------

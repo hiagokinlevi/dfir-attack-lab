@@ -37,6 +37,7 @@ Usage:
 from __future__ import annotations
 
 import csv
+import html
 import ipaddress
 import json
 from datetime import datetime, timezone
@@ -53,6 +54,8 @@ _SEVERITY_ORDER: dict[str, int] = {
     SeverityHint.MEDIUM.value: 2,
     SeverityHint.HIGH.value:   3,
 }
+
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
 # ---------------------------------------------------------------------------
@@ -474,6 +477,20 @@ def _export_json(timeline: list[dict], path: Path, case_id: str) -> None:
     path.write_text(json.dumps(doc, indent=2), encoding="utf-8")
 
 
+def _escape_html_text(value: object) -> str:
+    """Escape attacker-controlled text before embedding it into HTML."""
+    return html.escape("" if value is None else str(value), quote=True)
+
+
+def _csv_safe_cell(value: object) -> str:
+    """Prefix spreadsheet formula cells so analyst tools treat them as plain text."""
+    text = "" if value is None else str(value)
+    stripped = text.lstrip()
+    if stripped.startswith(_CSV_FORMULA_PREFIXES):
+        return f"'{text}"
+    return text
+
+
 def _severity_badge_color(severity: str) -> str:
     """Return a CSS color class for the severity badge."""
     return {
@@ -499,8 +516,8 @@ def _export_html(timeline: list[dict], path: Path, case_id: str) -> None:
         if entry.get("_type") == "gap":
             rows.append(
                 f'<tr class="gap"><td colspan="6">'
-                f'⚠ GAP: {entry["duration_minutes"]} min missing '
-                f'({entry["start"]} → {entry["end"]})</td></tr>'
+                f'⚠ GAP: {_escape_html_text(entry["duration_minutes"])} min missing '
+                f'({_escape_html_text(entry["start"])} → {_escape_html_text(entry["end"])})</td></tr>'
             )
             continue
 
@@ -508,16 +525,16 @@ def _export_html(timeline: list[dict], path: Path, case_id: str) -> None:
         color = _severity_badge_color(severity)
         badge = (
             f'<span style="background:{color};color:#fff;padding:2px 6px;'
-            f'border-radius:3px;font-size:0.8em;">{severity.upper()}</span>'
+            f'border-radius:3px;font-size:0.8em;">{_escape_html_text(severity.upper())}</span>'
         )
-        raw_escaped = (entry.get("raw", "") or "")[:120].replace("<", "&lt;").replace(">", "&gt;")
+        raw_escaped = _escape_html_text((entry.get("raw", "") or "")[:120])
         rows.append(
             f"<tr>"
-            f"<td>{entry.get('timestamp', '')}</td>"
+            f"<td>{_escape_html_text(entry.get('timestamp', ''))}</td>"
             f"<td>{badge}</td>"
-            f"<td>{entry.get('category', '')}</td>"
-            f"<td>{entry.get('actor') or ''}</td>"
-            f"<td>{entry.get('action', '')}</td>"
+            f"<td>{_escape_html_text(entry.get('category', ''))}</td>"
+            f"<td>{_escape_html_text(entry.get('actor') or '')}</td>"
+            f"<td>{_escape_html_text(entry.get('action', ''))}</td>"
             f"<td><code>{raw_escaped}</code></td>"
             f"</tr>"
         )
@@ -535,7 +552,7 @@ def _export_html(timeline: list[dict], path: Path, case_id: str) -> None:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Incident Timeline — {case_id}</title>
+<title>Incident Timeline — {_escape_html_text(case_id)}</title>
 <style>
   body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 2rem; background: #f5f6fa; color: #2c3e50; }}
   h1 {{ color: #2c3e50; border-bottom: 2px solid #e74c3c; padding-bottom: 0.5rem; }}
@@ -551,13 +568,13 @@ def _export_html(timeline: list[dict], path: Path, case_id: str) -> None:
 </style>
 </head>
 <body>
-<h1>Incident Timeline — <code>{case_id}</code></h1>
+<h1>Incident Timeline — <code>{_escape_html_text(case_id)}</code></h1>
 <div class="meta">
-  <strong>Generated:</strong> {generated_at} &nbsp;|&nbsp;
-  <strong>Events:</strong> {summary['total_events']} &nbsp;|&nbsp;
-  <strong>Gaps:</strong> {summary['gap_count']} ({summary['total_gap_minutes']} min total)<br>
-  <strong>Severity:</strong> {sev_summary or 'n/a'}<br>
-  <strong>Category:</strong> {cat_summary or 'n/a'}
+  <strong>Generated:</strong> {_escape_html_text(generated_at)} &nbsp;|&nbsp;
+  <strong>Events:</strong> {_escape_html_text(summary['total_events'])} &nbsp;|&nbsp;
+  <strong>Gaps:</strong> {_escape_html_text(summary['gap_count'])} ({_escape_html_text(summary['total_gap_minutes'])} min total)<br>
+  <strong>Severity:</strong> {_escape_html_text(sev_summary or 'n/a')}<br>
+  <strong>Category:</strong> {_escape_html_text(cat_summary or 'n/a')}
 </div>
 <table>
   <thead>
@@ -620,16 +637,19 @@ def _export_csv(timeline: list[dict], path: Path) -> None:
 
             writer.writerow(
                 {
-                    "entry_type": "event",
-                    "timestamp": entry.get("timestamp"),
-                    "severity": entry.get("severity"),
-                    "category": entry.get("category"),
-                    "actor": entry.get("actor"),
-                    "target": entry.get("target"),
-                    "action": entry.get("action"),
-                    "source_file": entry.get("source_file"),
-                    "raw": entry.get("raw"),
-                    "metadata": json.dumps(entry.get("metadata", {}), sort_keys=True),
+                    key: _csv_safe_cell(value)
+                    for key, value in {
+                        "entry_type": "event",
+                        "timestamp": entry.get("timestamp"),
+                        "severity": entry.get("severity"),
+                        "category": entry.get("category"),
+                        "actor": entry.get("actor"),
+                        "target": entry.get("target"),
+                        "action": entry.get("action"),
+                        "source_file": entry.get("source_file"),
+                        "raw": entry.get("raw"),
+                        "metadata": json.dumps(entry.get("metadata", {}), sort_keys=True),
+                    }.items()
                 }
             )
 
