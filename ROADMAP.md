@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Standardized DFIR artifact schema (cycle 2)
+- [x] MITRE ATT&CK technique tagging (cycle 18)
