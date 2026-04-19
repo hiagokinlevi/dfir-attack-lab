@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] MITRE ATT&CK technique tagging (cycle 18)
+- [x] Sigma rule evaluation module (cycle 19)
