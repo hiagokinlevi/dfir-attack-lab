@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  victim-linux:
+    image: ubuntu:22.04
+    container_name: dfir-victim-linux
+    hostname: victim-linux
+    command: ["/bin/bash", "-lc", "/opt/lab/run.sh"]
+    volumes:
+      - ./lab-scripts/linux-run.sh:/opt/lab/run.sh:ro
+      - ./lab-output/linux:/lab-output
+    environment:
+      LAB_USER: analyst
+      ATTACKER_IP: 203.0.113.50
+    restart: unless-stopped
+
+  victim-windows-sim:
+    image: python:3.12-slim
+    container_name: dfir-victim-windows-sim
+    hostname: victim-windows-sim
+    command: ["/bin/bash", "-lc", "/opt/lab/run.sh"]
+    volumes:
+      - ./lab-scripts/windows-sim-run.sh:/opt/lab/run.sh:ro
+      - ./lab-output/windows:/lab-output
+    environment:
+      TARGET_USER: Administrator
+      ATTACKER_IP: 198.51.100.77
+    restart: unless-stopped
+
+  syslog-source:
+    image: alpine:3.20
+    container_name: dfir-syslog-source
+    hostname: syslog-source
+    command: >
+      /bin/sh -lc '
+      mkdir -p /lab-output &&
+      while true; do
+        TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ");
+        echo "$TS host=syslog-source app=cron msg=\"CRON[1234]: (root) CMD (run-parts /etc/cron.hourly)\"" >> /lab-output/syslog.log;
+        sleep 45;
+      done'
+    volumes:
+      - ./lab-output/syslog:/lab-output
+    restart: unless-stopped
+
+  attack-runner:
+    image: alpine:3.20
+    container_name: dfir-attack-runner
+    command: >
+      /bin/sh -lc '
+      mkdir -p /lab-output &&
+      cat > /lab-output/attack-activity.log <<EOF
+      [$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ATT&CK T1059 Command and Scripting Interpreter simulated
+      [$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ATT&CK T1110 Brute Force simulated against ssh
+      [$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ATT&CK T1105 Ingress Tool Transfer simulated via curl
+      [$(date -u +"%Y-%m-%dT%H:%M:%SZ")] ATT&CK T1053 Scheduled Task/Job simulated
+      EOF
+      sleep infinity'
+    volumes:
+      - ./lab-output/attacks:/lab-output
+    restart: unless-stopped
