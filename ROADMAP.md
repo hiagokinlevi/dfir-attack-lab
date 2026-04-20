@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Sigma rule evaluation module (cycle 19)
+- [x] Remote acquisition via SSH and WinRM (cycle 20)
