@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] DFIR attack simulation dataset (cycle 21)
+- [x] Dockerized DFIR lab environment (cycle 22)
