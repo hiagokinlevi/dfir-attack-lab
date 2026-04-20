@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Remote acquisition via SSH and WinRM (cycle 20)
+- [x] DFIR attack simulation dataset (cycle 21)
