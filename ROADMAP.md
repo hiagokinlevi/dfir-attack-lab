@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Dockerized DFIR lab environment (cycle 22)
+- [x] Export connectors for analysis platforms (cycle 23)
