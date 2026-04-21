@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Export connectors for analysis platforms (cycle 23)
+- [x] Configurable Timeline Gap Detection Threshold (cycle 24)
