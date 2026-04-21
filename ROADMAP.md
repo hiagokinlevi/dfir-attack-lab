@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Configurable Timeline Gap Detection Threshold (cycle 24)
+- [x] CLI command for case integrity verification (cycle 25)
