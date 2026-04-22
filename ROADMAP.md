@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] CLI flag to suppress low-severity events in reports (cycle 26)
+- [x] Timeline builder support for deterministic secondary sorting (cycle 27)
