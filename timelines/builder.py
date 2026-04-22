@@ -1,51 +1,53 @@
 from __future__ import annotations
 
-from datetime import timedelta
-from typing import Iterable
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Iterable, List, Sequence
 
 from normalizers.models import TriageEvent
 
 
-def build_timeline(events: Iterable[TriageEvent], gap_threshold_minutes: int = 30) -> list[TriageEvent]:
-    """Sort events chronologically and insert synthetic logging-gap events.
+@dataclass(frozen=True)
+class TimelineGap:
+    start: datetime
+    end: datetime
+    duration_seconds: float
 
-    Args:
-        events: Iterable of normalized triage events.
-        gap_threshold_minutes: Minutes between adjacent events required to flag a gap.
 
-    Returns:
-        A sorted timeline including synthetic gap events where applicable.
+@dataclass(frozen=True)
+class TimelineResult:
+    events: List[TriageEvent]
+    gaps: List[TimelineGap]
+
+
+def _event_sort_key(event: TriageEvent) -> tuple:
+    """Deterministic timeline ordering.
+
+    Primary sort is timestamp. For events sharing the same timestamp, use
+    stable secondary keys so repeated runs always produce the same output.
     """
-    sorted_events = sorted(events, key=lambda e: e.ts)
-    if not sorted_events:
-        return []
 
-    gap_threshold = timedelta(minutes=gap_threshold_minutes)
-    output: list[TriageEvent] = [sorted_events[0]]
+    return (
+        event.timestamp,
+        (event.source or ""),
+        (event.event_type or ""),
+    )
 
-    for current in sorted_events[1:]:
-        previous = output[-1]
-        delta = current.ts - previous.ts
 
-        if delta > gap_threshold:
-            gap_event = TriageEvent(
-                ts=previous.ts + gap_threshold,
-                source="timeline",
-                category="logging_gap",
-                severity="medium",
-                message=(
-                    f"Potential logging gap detected: {int(delta.total_seconds() // 60)} "
-                    "minutes without events"
-                ),
-                raw={
-                    "gap_start": previous.ts.isoformat(),
-                    "gap_end": current.ts.isoformat(),
-                    "gap_minutes": int(delta.total_seconds() // 60),
-                    "threshold_minutes": gap_threshold_minutes,
-                },
-            )
-            output.append(gap_event)
+def build_timeline(events: Sequence[TriageEvent] | Iterable[TriageEvent], gap_threshold_seconds: int = 300) -> TimelineResult:
+    sorted_events = sorted(list(events), key=_event_sort_key)
 
-        output.append(current)
+    gaps: List[TimelineGap] = []
+    if len(sorted_events) > 1:
+        for prev, curr in zip(sorted_events, sorted_events[1:]):
+            delta = (curr.timestamp - prev.timestamp).total_seconds()
+            if delta > gap_threshold_seconds:
+                gaps.append(
+                    TimelineGap(
+                        start=prev.timestamp,
+                        end=curr.timestamp,
+                        duration_seconds=delta,
+                    )
+                )
 
-    return output
+    return TimelineResult(events=sorted_events, gaps=gaps)
