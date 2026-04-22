@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Timeline builder support for deterministic secondary sorting (cycle 27)
+- [x] Auth log parser extraction of SSH source port (cycle 28)
