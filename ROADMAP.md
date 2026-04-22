@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] CLI command for case integrity verification (cycle 25)
+- [x] CLI flag to suppress low-severity events in reports (cycle 26)
