@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Case manifest includes collector command provenance (cycle 29)
+- [x] JSONL report writer enforces UTF-8 and newline termination (cycle 30)
