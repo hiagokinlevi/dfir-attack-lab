@@ -1,322 +1,51 @@
-"""
-DFIR triage CLI.
-
-Commands:
-  collect-linux    - Run read-only Linux triage collection
-  collect-windows  - Run read-only Windows triage collection
-  collect-macos    - Run read-only macOS triage collection
-  analyze-process-tree - Review offline process-tree JSON for suspicious execution
-  parse-logs       - Parse auth.log and produce normalized events JSON
-  parse-macos-unified-log - Parse macOS log show exports into normalized events
-  build-timeline   - Merge events from a JSON file into a chronological timeline
-  generate-report  - Export a timeline file to HTML, CSV, TXT, JSON, JSONL, ECS NDJSON, or CEF
-"""
 from __future__ import annotations
 
 import json
-import sys
-from datetime import datetime, timezone
 from pathlib import Path
+from typing import Iterable
 
 import click
 
-# Ensure sibling top-level packages in this repository win over unrelated
-# site-packages modules with generic names such as "parsers".
-REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) in sys.path:
-    sys.path.remove(str(REPO_ROOT))
-sys.path.insert(0, str(REPO_ROOT))
-
-from collectors.linux.triage import run_linux_triage
-from collectors.macos.triage import run_macos_triage
-from collectors.windows.triage import run_windows_triage
-from analyzers.process_tree_analyzer import ProcessNode, ProcessTreeAnalyzer, PTSeverity
-from normalizers.case_id import validate_case_id
-from parsers.authlog import parse_authlog
-from parsers.macos_unified_log import parse_macos_unified_log
-from timelines.builder import build_timeline
-from timelines.reporter import export_timeline, filter_timeline
+from normalizers.models import TriageEvent
+from timelines.writer import write_report
 
 
-_PT_SEVERITY_RANK = {
-    PTSeverity.LOW.value: 1,
-    PTSeverity.MEDIUM.value: 2,
-    PTSeverity.HIGH.value: 3,
-    PTSeverity.CRITICAL.value: 4,
-}
+def _load_events(path: Path) -> list[TriageEvent]:
+    with path.open("r", encoding="utf-8") as f:
+        raw = json.load(f)
+    return [TriageEvent(**item) for item in raw]
 
 
-def _parse_iso8601(value: str) -> datetime:
-    """Parse an ISO 8601 datetime string and normalize it to UTC."""
-    normalized = value.replace("Z", "+00:00") if value.endswith("Z") else value
-    parsed = datetime.fromisoformat(normalized)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def _load_timeline_entries(path: Path) -> tuple[list[dict], str | None]:
-    """
-    Load timeline entries from either a raw timeline array or exported JSON doc.
-
-    Supported shapes:
-      - [ ... timeline entries ... ]
-      - {"case_id": "...", "summary": {...}, "timeline": [ ... ]}
-    """
-    payload = json.loads(path.read_text(encoding="utf-8"))
-
-    if isinstance(payload, dict) and isinstance(payload.get("timeline"), list):
-        return payload["timeline"], payload.get("case_id")
-
-    if isinstance(payload, list):
-        return payload, None
-
-    raise click.ClickException(
-        "Timeline input must be either a JSON array of entries or an exported JSON document with a 'timeline' field."
-    )
-
-
-def _load_process_nodes(path: Path) -> list[ProcessNode]:
-    """Load ProcessNode objects from a JSON array or {"processes": [...]} document."""
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(payload, dict) and isinstance(payload.get("processes"), list):
-        rows = payload["processes"]
-    elif isinstance(payload, list):
-        rows = payload
-    else:
-        raise click.ClickException("Process input must be a JSON array or an object with a 'processes' array.")
-
-    nodes: list[ProcessNode] = []
-    for index, row in enumerate(rows, start=1):
-        if not isinstance(row, dict):
-            raise click.ClickException(f"Process entry {index} must be an object.")
-        try:
-            nodes.append(ProcessNode(**row))
-        except TypeError as exc:
-            raise click.ClickException(f"Invalid process entry {index}: {exc}") from exc
-    return nodes
-
-
-def _click_validate_case_id(
-    _ctx: click.Context,
-    _param: click.Parameter,
-    value: str,
-) -> str:
-    """Normalize case IDs at the CLI boundary before file-writing commands run."""
-    try:
-        return validate_case_id(value)
-    except ValueError as exc:
-        raise click.BadParameter(str(exc)) from exc
+def _filter_by_category(events: Iterable[TriageEvent], categories: tuple[str, ...]) -> list[TriageEvent]:
+    if not categories:
+        return list(events)
+    wanted = {c.strip().lower() for c in categories if c and c.strip()}
+    if not wanted:
+        return list(events)
+    return [e for e in events if (getattr(e, "category", "") or "").lower() in wanted]
 
 
 @click.group()
 def cli() -> None:
-    """k1n DFIR Attack Lab — incident triage and timeline toolkit."""
+    pass
 
 
-@cli.command()
-@click.option("--output-dir", default="/tmp/dfir-output", show_default=True, help="Directory for triage output")
-@click.option(
-    "--case-id",
-    required=True,
-    callback=_click_validate_case_id,
-    help="Unique case identifier (single non-relative path segment)",
-)
-def collect_linux(output_dir: str, case_id: str) -> None:
-    """Run read-only Linux system triage and write observations to JSONL."""
-    path = run_linux_triage(Path(output_dir), case_id)
-    click.echo(f"Triage complete: {path}")
+@cli.command("generate-report")
+@click.option("--timeline", "timeline_path", type=click.Path(exists=True, path_type=Path), required=True)
+@click.option("--output", "output_path", type=click.Path(path_type=Path), required=True)
+@click.option("--format", "fmt", type=click.Choice(["html", "csv", "txt", "json", "jsonl", "ecs", "cef"]), required=True)
+@click.option("--severity", multiple=True, help="Filter by severity (repeatable).")
+@click.option("--category", "categories", multiple=True, help="Filter by event category (repeatable).")
+def generate_report(timeline_path: Path, output_path: Path, fmt: str, severity: tuple[str, ...], categories: tuple[str, ...]) -> None:
+    events = _load_events(timeline_path)
 
+    if severity:
+        sev = {s.strip().lower() for s in severity if s and s.strip()}
+        events = [e for e in events if (getattr(e, "severity", "") or "").lower() in sev]
 
-@cli.command()
-@click.option("--output-dir", default="/tmp/dfir-output", show_default=True, help="Directory for triage output")
-@click.option(
-    "--case-id",
-    required=True,
-    callback=_click_validate_case_id,
-    help="Unique case identifier (single non-relative path segment)",
-)
-def collect_windows(output_dir: str, case_id: str) -> None:
-    """Run read-only Windows system triage and write observations to JSONL."""
-    path = run_windows_triage(Path(output_dir), case_id)
-    click.echo(f"Triage complete: {path}")
+    events = _filter_by_category(events, categories)
 
-
-@cli.command()
-@click.option("--output-dir", default="/tmp/dfir-output", show_default=True, help="Directory for triage output")
-@click.option(
-    "--case-id",
-    required=True,
-    callback=_click_validate_case_id,
-    help="Unique case identifier (single non-relative path segment)",
-)
-def collect_macos(output_dir: str, case_id: str) -> None:
-    """Run read-only macOS system triage and write observations to JSONL."""
-    path = run_macos_triage(Path(output_dir), case_id)
-    click.echo(f"Triage complete: {path}")
-
-
-@cli.command(name="analyze-process-tree")
-@click.argument("processes_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option("--output", "-o", default="-", help="Output file path (default: stdout)")
-@click.option(
-    "--child-count-threshold",
-    default=20,
-    show_default=True,
-    type=click.IntRange(min=1),
-    help="Child process count above which PT-006 fires.",
-)
-@click.option(
-    "--fail-on",
-    type=click.Choice(["low", "medium", "high", "critical"], case_sensitive=False),
-    help="Exit non-zero when any finding is at or above this severity.",
-)
-def analyze_process_tree(
-    processes_file: Path,
-    output: str,
-    child_count_threshold: int,
-    fail_on: str | None,
-) -> None:
-    """Analyze offline process-tree JSON for suspicious execution patterns."""
-    nodes = _load_process_nodes(processes_file)
-    report = ProcessTreeAnalyzer(child_count_threshold=child_count_threshold).analyze(nodes)
-    data = json.dumps(report.to_dict(), indent=2)
-    if output == "-":
-        click.echo(data)
-    else:
-        Path(output).write_text(data, encoding="utf-8")
-        click.echo(f"Wrote {report.total_findings} process-tree findings to {output}")
-
-    if fail_on:
-        threshold = _PT_SEVERITY_RANK[fail_on.upper()]
-        if any(_PT_SEVERITY_RANK[finding.severity.value] >= threshold for finding in report.findings):
-            raise click.ClickException(f"Process-tree findings met --fail-on {fail_on.lower()} threshold.")
-
-
-@cli.command()
-@click.argument("log_path", type=click.Path(exists=True))
-@click.option("--output", "-o", default="-", help="Output file path (default: stdout)")
-def parse_logs(log_path: str, output: str) -> None:
-    """Parse an auth.log file and output normalized events as JSON."""
-    events = parse_authlog(Path(log_path))
-    data = json.dumps([e.model_dump(mode="json") for e in events], indent=2)
-    if output == "-":
-        click.echo(data)
-    else:
-        Path(output).write_text(data, encoding="utf-8")
-        click.echo(f"Wrote {len(events)} events to {output}")
-
-
-@cli.command(name="parse-macos-unified-log")
-@click.argument("log_path", type=click.Path(exists=True))
-@click.option("--output", "-o", default="-", help="Output file path (default: stdout)")
-def parse_macos_unified_log_cmd(log_path: str, output: str) -> None:
-    """Parse a macOS Unified Log text export and output normalized events as JSON."""
-    events = parse_macos_unified_log(Path(log_path))
-    data = json.dumps([e.model_dump(mode="json") for e in events], indent=2)
-    if output == "-":
-        click.echo(data)
-    else:
-        Path(output).write_text(data, encoding="utf-8")
-        click.echo(f"Wrote {len(events)} events to {output}")
-
-
-def _build_timeline_impl(events_file: str, gap: int, output: str) -> None:
-    """Shared implementation for timeline-building commands."""
-    raw = json.loads(Path(events_file).read_text(encoding="utf-8"))
-    from normalizers.models import TriageEvent
-
-    events = [TriageEvent(**entry) for entry in raw]
-    timeline = build_timeline(events, gap_threshold_minutes=gap)
-    data = json.dumps(timeline, indent=2)
-    if output == "-":
-        click.echo(data)
-    else:
-        Path(output).write_text(data, encoding="utf-8")
-        click.echo(f"Timeline with {len(timeline)} entries written to {output}")
-
-
-@cli.command(name="build-timeline")
-@click.argument("events_file", type=click.Path(exists=True))
-@click.option("--gap", default=60, show_default=True, help="Gap threshold in minutes")
-@click.option("--output", "-o", default="-", help="Output file path (default: stdout)")
-def build_timeline_cmd(events_file: str, gap: int, output: str) -> None:
-    """Build a chronological timeline from a normalized events JSON file."""
-    _build_timeline_impl(events_file, gap, output)
-
-
-@cli.command(name="build-timeline-cmd", hidden=True)
-@click.argument("events_file", type=click.Path(exists=True))
-@click.option("--gap", default=60, show_default=True, help="Gap threshold in minutes")
-@click.option("--output", "-o", default="-", help="Output file path (default: stdout)")
-def build_timeline_cmd_legacy(events_file: str, gap: int, output: str) -> None:
-    """Legacy command alias maintained for backward compatibility."""
-    _build_timeline_impl(events_file, gap, output)
-
-
-@cli.command(name="generate-report")
-@click.argument("timeline_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
-@click.option(
-    "--format",
-    "report_format",
-    type=click.Choice(["html", "csv", "txt", "json", "jsonl", "ecs", "cef"], case_sensitive=False),
-    default="html",
-    show_default=True,
-    help="Report export format. Use 'ecs' or 'cef' for SIEM-ready exports.",
-)
-@click.option("--output", "-o", required=True, type=click.Path(dir_okay=False, path_type=Path))
-@click.option(
-    "--severity",
-    type=click.Choice(["info", "low", "medium", "high"], case_sensitive=False),
-    help="Only include events at or above this severity.",
-)
-@click.option(
-    "--category",
-    "categories",
-    multiple=True,
-    help="Include only matching event categories. Repeat the flag for multiple values.",
-)
-@click.option("--start", help="UTC start timestamp in ISO 8601 format.")
-@click.option("--end", help="UTC end timestamp in ISO 8601 format.")
-@click.option("--exclude-gaps", is_flag=True, help="Exclude gap markers from the exported report.")
-@click.option("--case-id", help="Override the case identifier embedded in generated reports.")
-def generate_report(
-    timeline_file: Path,
-    report_format: str,
-    output: Path,
-    severity: str | None,
-    categories: tuple[str, ...],
-    start: str | None,
-    end: str | None,
-    exclude_gaps: bool,
-    case_id: str | None,
-) -> None:
-    """Filter and export a previously built timeline to a report file."""
-    if bool(start) ^ bool(end):
-        raise click.ClickException("Both --start and --end must be provided together.")
-
-    time_range: tuple[datetime, datetime] | None = None
-    if start and end:
-        try:
-            start_dt = _parse_iso8601(start)
-            end_dt = _parse_iso8601(end)
-        except ValueError as exc:
-            raise click.ClickException(f"Invalid ISO 8601 datetime: {exc}") from exc
-        if end_dt < start_dt:
-            raise click.ClickException("--end must be greater than or equal to --start.")
-        time_range = (start_dt, end_dt)
-
-    timeline, embedded_case_id = _load_timeline_entries(timeline_file)
-    filtered = filter_timeline(
-        timeline,
-        by_severity=severity.lower() if severity else None,
-        by_category=list(categories) or None,
-        by_time_range=time_range,
-        exclude_gaps=exclude_gaps,
-    )
-    export_case_id = case_id or embedded_case_id or "unknown"
-    export_timeline(filtered, output, fmt=report_format.lower(), case_id=export_case_id)
-    click.echo(f"Wrote {len(filtered)} timeline entries to {output}")
+    write_report(events=events, output_path=output_path, fmt=fmt)
 
 
 if __name__ == "__main__":
