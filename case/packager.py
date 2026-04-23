@@ -1,142 +1,85 @@
-"""
-Case packager for DFIR artifact collection.
-
-Packages all triage artifacts, parsed event files, and timeline output into
-a structured case directory with SHA-256 integrity verification. Produces a
-manifest suitable for chain-of-custody documentation.
-"""
 from __future__ import annotations
+
 import hashlib
 import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Dict, Iterable, Optional
 
-from normalizers.case_id import validate_case_id
 
-
-def _sha256(path: Path) -> str:
-    """Compute SHA-256 hash of a file."""
+def _sha256_file(path: Path) -> str:
     h = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(65536), b""):
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
 
 
-def _is_within_directory(path: Path, directory: Path) -> bool:
-    """Return True when path resolves under directory."""
-    try:
-        path.resolve(strict=False).relative_to(directory.resolve(strict=False))
-        return True
-    except ValueError:
-        return False
+def _iter_files(root: Path) -> Iterable[Path]:
+    for p in sorted(root.rglob("*")):
+        if p.is_file() and p.name != "integrity_manifest.json":
+            yield p
 
 
 def package_case(
-    source_files: list[Path],
-    case_id: str,
-    output_dir: Path,
-    analyst: str = "unknown",
-    notes: str = "",
+    source_dir: str | Path,
+    destination_dir: str | Path,
+    collector_command: Optional[str] = None,
 ) -> Path:
-    """
-    Package DFIR artifacts into a structured case directory.
+    source = Path(source_dir)
+    destination = Path(destination_dir)
 
-    Copies all source files, computes SHA-256 for each, and writes a
-    case manifest JSON. The manifest provides chain-of-custody evidence
-    and enables integrity verification of collected artifacts.
+    if not source.exists() or not source.is_dir():
+        raise ValueError(f"Invalid source directory: {source}")
 
-    Args:
-        source_files: List of paths to artifact files to include.
-        case_id:      Unique case identifier (e.g., "CASE-2026-001").
-        output_dir:   Directory where the case package will be created.
-        analyst:      Name/ID of the analyst packaging the case.
-        notes:        Optional case notes to include in the manifest.
+    if destination.exists():
+        shutil.rmtree(destination)
+    shutil.copytree(source, destination)
 
-    Returns:
-        Path to the written case manifest JSON file.
-    """
-    case_id = validate_case_id(case_id)
-    case_dir = output_dir / case_id
-    artifacts_dir = case_dir / "artifacts"
-    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = destination / "integrity_manifest.json"
 
-    manifest_entries: list[dict] = []
+    files: Dict[str, str] = {}
+    for f in _iter_files(destination):
+        rel = str(f.relative_to(destination)).replace("\\", "/")
+        files[rel] = _sha256_file(f)
 
-    for src in source_files:
-        if not src.exists():
-            continue
-        dest = artifacts_dir / src.name
-        shutil.copy2(src, dest)
-        manifest_entries.append({
-            "filename": src.name,
-            "original_path": str(src),
-            "case_path": str(dest),
-            "sha256": _sha256(dest),
-            "size_bytes": dest.stat().st_size,
-            "collected_at": datetime.fromtimestamp(src.stat().st_mtime, tz=timezone.utc).isoformat(),
-        })
+    metadata: Dict[str, str] = {
+        "collected_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+    }
+    if collector_command:
+        metadata["collector_command"] = collector_command
 
     manifest = {
-        "case_id": case_id,
-        "packaged_at": datetime.now(timezone.utc).isoformat(),
-        "analyst": analyst,
-        "notes": notes,
-        "artifact_count": len(manifest_entries),
-        "artifacts": manifest_entries,
+        "metadata": metadata,
+        "files": files,
     }
 
-    manifest_path = case_dir / "case_manifest.json"
-    manifest_path.write_text(json.dumps(manifest, indent=2))
-
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest_path
 
 
-def verify_case(manifest_path: Path) -> list[dict]:
-    """
-    Verify the integrity of a packaged case by re-computing SHA-256 hashes.
+def verify_case(case_dir: str | Path) -> bool:
+    root = Path(case_dir)
+    manifest_path = root / "integrity_manifest.json"
 
-    Args:
-        manifest_path: Path to a case_manifest.json produced by package_case().
+    if not manifest_path.exists():
+        return False
 
-    Returns:
-        List of verification results. Each entry has keys:
-        - filename: str
-        - expected_sha256: str
-        - actual_sha256: str
-        - ok: bool — True if hashes match
-    """
-    manifest = json.loads(manifest_path.read_text())
-    results: list[dict] = []
-    artifacts_dir = manifest_path.parent / "artifacts"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return False
 
-    for entry in manifest.get("artifacts", []):
-        path = Path(entry["case_path"])
-        if not _is_within_directory(path, artifacts_dir):
-            results.append({
-                "filename": entry["filename"],
-                "expected_sha256": entry["sha256"],
-                "actual_sha256": "INVALID_CASE_PATH",
-                "ok": False,
-            })
-            continue
+    files = manifest.get("files")
+    if not isinstance(files, dict):
+        return False
 
-        if not path.exists():
-            results.append({
-                "filename": entry["filename"],
-                "expected_sha256": entry["sha256"],
-                "actual_sha256": "FILE_MISSING",
-                "ok": False,
-            })
-            continue
+    for rel, expected in files.items():
+        p = root / rel
+        if not p.exists() or not p.is_file():
+            return False
+        if _sha256_file(p) != expected:
+            return False
 
-        actual = _sha256(path)
-        results.append({
-            "filename": entry["filename"],
-            "expected_sha256": entry["sha256"],
-            "actual_sha256": actual,
-            "ok": actual == entry["sha256"],
-        })
-
-    return results
+    return True
