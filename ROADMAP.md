@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Auth log parser extraction of SSH source port (cycle 28)
+- [x] Case manifest includes collector command provenance (cycle 29)
