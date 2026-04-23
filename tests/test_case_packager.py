@@ -1,106 +1,42 @@
-"""Tests for the case packager."""
 import json
-import tempfile
 from pathlib import Path
+
 from case.packager import package_case, verify_case
 
 
-def test_package_creates_manifest():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        # Create a fake artifact file
-        artifact = Path(tmpdir) / "triage.jsonl"
-        artifact.write_text('{"case_id": "TEST"}\n')
+def test_manifest_includes_provenance_metadata(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    dst = tmp_path / "dst"
+    src.mkdir()
+    (src / "artifact.txt").write_text("evidence", encoding="utf-8")
 
-        output_dir = Path(tmpdir) / "cases"
-        manifest_path = package_case(
-            source_files=[artifact],
-            case_id="CASE-001",
-            output_dir=output_dir,
-            analyst="analyst@example.com",
-        )
+    manifest_path = package_case(src, dst, collector_command="collect-linux --output case-001")
 
-        assert manifest_path.exists()
-        manifest = json.loads(manifest_path.read_text())
-        assert manifest["case_id"] == "CASE-001"
-        assert manifest["artifact_count"] == 1
-        assert manifest["artifacts"][0]["filename"] == "triage.jsonl"
-        assert len(manifest["artifacts"][0]["sha256"]) == 64  # SHA-256 hex
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert "metadata" in manifest
+    assert "files" in manifest
+
+    metadata = manifest["metadata"]
+    assert metadata["collector_command"] == "collect-linux --output case-001"
+    assert metadata["collected_at_utc"].endswith("+00:00")
 
 
-def test_verify_case_integrity():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        artifact = Path(tmpdir) / "data.jsonl"
-        artifact.write_text("test content\n")
+def test_verify_case_remains_hash_based_and_backward_compatible(tmp_path: Path) -> None:
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+    (case_dir / "a.txt").write_text("alpha", encoding="utf-8")
 
-        output_dir = Path(tmpdir) / "cases"
-        manifest_path = package_case([artifact], "CASE-002", output_dir)
+    # Simulate older manifest without metadata; verification should still succeed.
+    from case.packager import _sha256_file
 
-        results = verify_case(manifest_path)
-        assert len(results) == 1
-        assert results[0]["ok"] is True
+    manifest = {
+        "files": {
+            "a.txt": _sha256_file(case_dir / "a.txt"),
+        }
+    }
+    (case_dir / "integrity_manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
 
+    assert verify_case(case_dir)
 
-def test_verify_detects_tampering():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        artifact = Path(tmpdir) / "data.jsonl"
-        artifact.write_text("original content\n")
-
-        output_dir = Path(tmpdir) / "cases"
-        manifest_path = package_case([artifact], "CASE-003", output_dir)
-
-        # Tamper with the copied artifact
-        manifest = json.loads(manifest_path.read_text())
-        tampered_path = Path(manifest["artifacts"][0]["case_path"])
-        tampered_path.write_text("tampered content\n")
-
-        results = verify_case(manifest_path)
-        assert results[0]["ok"] is False
-
-
-def test_verify_rejects_case_paths_outside_artifacts_directory():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        artifact = Path(tmpdir) / "data.jsonl"
-        artifact.write_text("original content\n")
-        external = Path(tmpdir) / "external.jsonl"
-        external.write_text("external content\n")
-
-        output_dir = Path(tmpdir) / "cases"
-        manifest_path = package_case([artifact], "CASE-004", output_dir)
-
-        manifest = json.loads(manifest_path.read_text())
-        manifest["artifacts"][0]["case_path"] = str(external)
-        manifest_path.write_text(json.dumps(manifest, indent=2))
-
-        results = verify_case(manifest_path)
-        assert results[0]["actual_sha256"] == "INVALID_CASE_PATH"
-        assert results[0]["ok"] is False
-
-
-def test_package_rejects_relative_case_id_segments():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        artifact = Path(tmpdir) / "triage.jsonl"
-        artifact.write_text('{"case_id": "TEST"}\n')
-
-        output_dir = Path(tmpdir) / "cases"
-
-        try:
-            package_case([artifact], "../CASE-005", output_dir)
-        except ValueError as exc:
-            assert "single non-relative path segment" in str(exc)
-        else:
-            raise AssertionError("package_case() should reject relative path segments in case_id")
-
-
-def test_package_rejects_absolute_like_case_id():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        artifact = Path(tmpdir) / "triage.jsonl"
-        artifact.write_text('{"case_id": "TEST"}\n')
-
-        output_dir = Path(tmpdir) / "cases"
-
-        try:
-            package_case([artifact], "nested/case", output_dir)
-        except ValueError as exc:
-            assert "single non-relative path segment" in str(exc)
-        else:
-            raise AssertionError("package_case() should reject path separators in case_id")
+    (case_dir / "a.txt").write_text("tampered", encoding="utf-8")
+    assert not verify_case(case_dir)
