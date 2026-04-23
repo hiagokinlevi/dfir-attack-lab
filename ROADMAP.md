@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] JSONL report writer enforces UTF-8 and newline termination (cycle 30)
+- [x] Add --category filter support to generate-report CLI (cycle 31)
