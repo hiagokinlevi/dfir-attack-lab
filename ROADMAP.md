@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --category filter support to generate-report CLI (cycle 31)
+- [x] Add --verify-case command to CLI using existing verify_case() (cycle 32)
