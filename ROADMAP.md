@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --min-severity support to build-timeline CLI (cycle 33)
+- [x] Add --since/--until ISO-8601 time filters to build-timeline CLI (cycle 34)
