@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --verify-case command to CLI using existing verify_case() (cycle 32)
+- [x] Add --min-severity support to build-timeline CLI (cycle 33)
