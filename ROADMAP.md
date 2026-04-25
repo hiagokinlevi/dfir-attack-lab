@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --since/--until ISO-8601 time filters to build-timeline CLI (cycle 34)
+- [x] Add --event-id filter to parse-logs for Windows EVTX (cycle 35)
