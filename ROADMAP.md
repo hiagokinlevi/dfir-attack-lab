@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --timezone option to generate-report for localized timestamp rendering (cycle 36)
+- [x] Add --summary-only flag to generate-report CLI (cycle 37)
