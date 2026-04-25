@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --event-id filter to parse-logs for Windows EVTX (cycle 35)
+- [x] Add --timezone option to generate-report for localized timestamp rendering (cycle 36)
