@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --summary-only flag to generate-report CLI (cycle 37)
+- [x] Add --fail-on-gaps flag to build-timeline CLI (cycle 38)
