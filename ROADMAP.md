@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --fail-on-gaps flag to build-timeline CLI (cycle 38)
+- [x] Add --hostname filter to build-timeline CLI (cycle 39)
