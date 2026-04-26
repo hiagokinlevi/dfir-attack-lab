@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --hostname filter to build-timeline CLI (cycle 39)
+- [x] Add --output-dir option to collect-linux CLI (cycle 40)
