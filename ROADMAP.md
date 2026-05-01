@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --service-name filter to parse-logs for Windows Event ID 7045 (cycle 42)
+- [x] Add --user filter to parse-logs for Linux auth parser (cycle 43)
