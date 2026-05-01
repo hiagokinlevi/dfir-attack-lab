@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --output-dir option to collect-linux CLI (cycle 40)
+- [x] Add --sort-desc flag to build-timeline CLI (cycle 41)
