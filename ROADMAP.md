@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --sort-desc flag to build-timeline CLI (cycle 41)
+- [x] Add --service-name filter to parse-logs for Windows Event ID 7045 (cycle 42)
