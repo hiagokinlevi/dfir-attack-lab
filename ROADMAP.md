@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --case-id filter to build-timeline CLI (cycle 44)
+- [x] Add --json-output option to build-timeline CLI (cycle 45)
