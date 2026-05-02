@@ -1,74 +1,59 @@
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 from typing import Any
 
-import typer
-
-from normalizers.models import TriageEvent
-from timelines.builder import build_timeline
-
-app = typer.Typer(help="k1n DFIR Attack Lab CLI")
+from analysis.process_tree import analyze_process_tree
 
 
-@app.command("build-timeline")
-def build_timeline_command(
-    input_file: Path = typer.Argument(..., exists=True, readable=True, help="Path to normalized events JSON file"),
-    output_file: Path = typer.Option(
-        Path("timeline.txt"),
-        "--output",
-        "-o",
-        help="Path to timeline text output",
-    ),
-    json_output: Path | None = typer.Option(
-        None,
-        "--json-output",
-        help="Optional path to write timeline and gap metadata as JSON",
-    ),
-) -> None:
-    """Build a chronological timeline from normalized events with gap detection."""
-    raw = json.loads(input_file.read_text(encoding="utf-8"))
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="dfir-attack-lab")
+    subparsers = parser.add_subparsers(dest="command")
 
-    events: list[TriageEvent] = []
-    for item in raw:
-        if isinstance(item, dict):
-            events.append(TriageEvent(**item))
+    analyze_parser = subparsers.add_parser(
+        "analyze-process-tree",
+        help="Analyze an offline process-tree export for suspicious execution patterns.",
+        description=(
+            "Analyze an offline process-tree export and emit scored findings.\n\n"
+            "Example:\n"
+            "  dfir-attack-lab analyze-process-tree --input tree.json --min-score 70"
+        ),
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
+    analyze_parser.add_argument("--input", required=True, help="Path to process-tree JSON export")
+    analyze_parser.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        help="Only return findings with score >= MIN_SCORE",
+    )
 
-    timeline = build_timeline(events)
+    return parser
 
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    output_file.write_text("\n".join(timeline.lines), encoding="utf-8")
 
-    if json_output is not None:
-        json_output.parent.mkdir(parents=True, exist_ok=True)
-        payload: dict[str, Any] = {
-            "schema_version": "1.0",
-            "timeline": {
-                "events": [
-                    {
-                        "timestamp": e.timestamp.isoformat() if hasattr(e.timestamp, "isoformat") else str(e.timestamp),
-                        "host": getattr(e, "host", None),
-                        "source": getattr(e, "source", None),
-                        "event_type": getattr(e, "event_type", None),
-                        "severity": getattr(e, "severity", None),
-                        "message": getattr(e, "message", None),
-                        "raw": getattr(e, "raw", None),
-                    }
-                    for e in timeline.events
-                ],
-                "gaps": [
-                    {
-                        "start": g.start.isoformat() if hasattr(g.start, "isoformat") else str(g.start),
-                        "end": g.end.isoformat() if hasattr(g.end, "isoformat") else str(g.end),
-                        "duration_seconds": g.duration_seconds,
-                    }
-                    for g in timeline.gaps
-                ],
-            },
-        }
-        json_output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+def _cmd_analyze_process_tree(args: argparse.Namespace) -> int:
+    input_path = Path(args.input)
+    findings: list[dict[str, Any]] = analyze_process_tree(input_path)
 
-    typer.echo(f"Timeline written to: {output_file}")
-    if json_output is not None:
-        typer.echo(f"Timeline JSON written to: {json_output}")
+    if args.min_score is not None:
+        findings = [f for f in findings if float(f.get("score", 0)) >= args.min_score]
+
+    print(json.dumps(findings, indent=2))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command == "analyze-process-tree":
+        return _cmd_analyze_process_tree(args)
+
+    parser.print_help()
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
