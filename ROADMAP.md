@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --user filter to parse-logs for Linux auth parser (cycle 43)
+- [x] Add --case-id filter to build-timeline CLI (cycle 44)
