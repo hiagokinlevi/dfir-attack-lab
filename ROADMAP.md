@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --json-output option to build-timeline CLI (cycle 45)
+- [x] Add --min-score filter to analyze-process-tree CLI (cycle 46)
