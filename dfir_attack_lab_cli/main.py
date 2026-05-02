@@ -6,6 +6,7 @@ from typing import Any
 
 import typer
 
+from normalizers.models import TriageEvent
 from timelines.builder import build_timeline
 
 app = typer.Typer(help="k1n DFIR Attack Lab CLI")
@@ -13,43 +14,61 @@ app = typer.Typer(help="k1n DFIR Attack Lab CLI")
 
 @app.command("build-timeline")
 def build_timeline_command(
-    input_file: Path = typer.Argument(..., exists=True, readable=True, help="Path to normalized JSON/JSONL events"),
-    output_file: Path = typer.Option(..., "--output", "-o", help="Path to write timeline JSON"),
-    gap_minutes: int = typer.Option(30, "--gap-minutes", min=1, help="Gap threshold in minutes"),
-    case_id: str | None = typer.Option(
+    input_file: Path = typer.Argument(..., exists=True, readable=True, help="Path to normalized events JSON file"),
+    output_file: Path = typer.Option(
+        Path("timeline.txt"),
+        "--output",
+        "-o",
+        help="Path to timeline text output",
+    ),
+    json_output: Path | None = typer.Option(
         None,
-        "--case-id",
-        help="Only include normalized events matching this case_id before timeline generation",
+        "--json-output",
+        help="Optional path to write timeline and gap metadata as JSON",
     ),
 ) -> None:
-    events: list[dict[str, Any]] = []
+    """Build a chronological timeline from normalized events with gap detection."""
+    raw = json.loads(input_file.read_text(encoding="utf-8"))
 
-    if input_file.suffix.lower() == ".jsonl":
-        with input_file.open("r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                events.append(json.loads(line))
-    else:
-        with input_file.open("r", encoding="utf-8") as f:
-            loaded = json.load(f)
-        if isinstance(loaded, list):
-            events = loaded
-        else:
-            raise typer.BadParameter("Input JSON must be an array of normalized events")
+    events: list[TriageEvent] = []
+    for item in raw:
+        if isinstance(item, dict):
+            events.append(TriageEvent(**item))
 
-    if case_id is not None:
-        events = [e for e in events if e.get("case_id") == case_id]
-
-    timeline = build_timeline(events, gap_minutes=gap_minutes)
+    timeline = build_timeline(events)
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    with output_file.open("w", encoding="utf-8") as f:
-        json.dump(timeline, f, indent=2)
+    output_file.write_text("\n".join(timeline.lines), encoding="utf-8")
 
-    typer.echo(f"Timeline written: {output_file}")
+    if json_output is not None:
+        json_output.parent.mkdir(parents=True, exist_ok=True)
+        payload: dict[str, Any] = {
+            "schema_version": "1.0",
+            "timeline": {
+                "events": [
+                    {
+                        "timestamp": e.timestamp.isoformat() if hasattr(e.timestamp, "isoformat") else str(e.timestamp),
+                        "host": getattr(e, "host", None),
+                        "source": getattr(e, "source", None),
+                        "event_type": getattr(e, "event_type", None),
+                        "severity": getattr(e, "severity", None),
+                        "message": getattr(e, "message", None),
+                        "raw": getattr(e, "raw", None),
+                    }
+                    for e in timeline.events
+                ],
+                "gaps": [
+                    {
+                        "start": g.start.isoformat() if hasattr(g.start, "isoformat") else str(g.start),
+                        "end": g.end.isoformat() if hasattr(g.end, "isoformat") else str(g.end),
+                        "duration_seconds": g.duration_seconds,
+                    }
+                    for g in timeline.gaps
+                ],
+            },
+        }
+        json_output.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
-
-if __name__ == "__main__":
-    app()
+    typer.echo(f"Timeline written to: {output_file}")
+    if json_output is not None:
+        typer.echo(f"Timeline JSON written to: {json_output}")
