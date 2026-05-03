@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --min-severity filter to generate-report CLI (cycle 48)
+- [x] Add --timezone option to build-timeline CLI (cycle 49)
