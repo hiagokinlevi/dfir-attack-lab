@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --timezone option to build-timeline CLI (cycle 49)
+- [x] Add --event-id filter to parse-logs for Windows EVTX parser (cycle 50)
