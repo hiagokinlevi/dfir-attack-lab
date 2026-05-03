@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --min-score filter to analyze-process-tree CLI (cycle 46)
+- [x] Add --output-dir option to collect-macos CLI (cycle 47)
