@@ -1,59 +1,99 @@
 from __future__ import annotations
 
 import argparse
+import json
+import sys
+from datetime import datetime
 from pathlib import Path
-from typing import Iterable, List
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from normalizers.models import TriageEvent
-from parsers.authlog import parse_auth_log
-from parsers.windows_evtx import parse_windows_evtx
+from timelines.builder import build_timeline
 
 
-def _filter_by_service_name(events: Iterable[TriageEvent], service_name: str) -> List[TriageEvent]:
-    needle = service_name.lower()
-    filtered: List[TriageEvent] = []
-    for event in events:
-        if str(getattr(event, "source", "")).lower() != "windows_evtx":
-            continue
-        if str(getattr(event, "event_id", "")) != "7045":
-            continue
+def _resolve_timezone(value: str):
+    raw = (value or "").strip()
+    lowered = raw.lower()
 
-        haystacks = [
-            str(getattr(event, "service_name", "") or ""),
-            str(getattr(event, "message", "") or ""),
-        ]
-        if any(needle in h.lower() for h in haystacks):
-            filtered.append(event)
-    return filtered
+    if lowered == "utc":
+        return ZoneInfo("UTC")
+    if lowered == "local":
+        return datetime.now().astimezone().tzinfo
+
+    try:
+        return ZoneInfo(raw)
+    except ZoneInfoNotFoundError:
+        raise ValueError(
+            f"Invalid timezone '{value}'. Use 'UTC', 'local', or a valid IANA timezone like 'America/New_York'."
+        )
 
 
-def parse_logs_command(args: argparse.Namespace) -> List[TriageEvent]:
+def _format_ts(dt: datetime, tzinfo) -> str:
+    if dt is None:
+        return ""
+    if tzinfo is None:
+        return dt.isoformat()
+    if dt.tzinfo is None:
+        # preserve source object; only apply for rendering
+        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+    return dt.astimezone(tzinfo).isoformat()
+
+
+def cmd_build_timeline(args: argparse.Namespace) -> int:
+    tzinfo = None
+    if getattr(args, "timezone", None):
+        try:
+            tzinfo = _resolve_timezone(args.timezone)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+
     input_path = Path(args.input)
-    parser_name = args.parser
+    output_path = Path(args.output)
 
-    if parser_name == "authlog":
-        events = parse_auth_log(input_path)
-    elif parser_name == "windows-evtx":
-        events = parse_windows_evtx(input_path)
-        if getattr(args, "service_name", None):
-            events = _filter_by_service_name(events, args.service_name)
-    else:
-        raise ValueError(f"Unsupported parser: {parser_name}")
+    events = json.loads(input_path.read_text(encoding="utf-8"))
+    timeline = build_timeline(events)
 
-    return events
+    rendered = []
+    for item in timeline:
+        out = dict(item)
+        ts = item.get("timestamp")
+        if isinstance(ts, str):
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                out["timestamp"] = _format_ts(dt, tzinfo)
+            except ValueError:
+                out["timestamp"] = ts
+        rendered.append(out)
+
+    output_path.write_text(json.dumps(rendered, indent=2), encoding="utf-8")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dfir-attack-lab")
-    subparsers = parser.add_subparsers(dest="command")
+    sub = parser.add_subparsers(dest="command")
 
-    parse_logs = subparsers.add_parser("parse-logs")
-    parse_logs.add_argument("--input", required=True)
-    parse_logs.add_argument("--parser", required=True, choices=["authlog", "windows-evtx"])
-    parse_logs.add_argument(
-        "--service-name",
-        required=False,
-        help="Optional case-insensitive substring filter for Windows Event ID 7045 service names (windows-evtx parser only).",
+    p_tl = sub.add_parser("build-timeline")
+    p_tl.add_argument("--input", required=True)
+    p_tl.add_argument("--output", required=True)
+    p_tl.add_argument(
+        "--timezone",
+        default="UTC",
+        help="Output timezone for rendered timestamps: UTC, local, or IANA name (e.g. America/New_York).",
     )
+    p_tl.set_defaults(func=cmd_build_timeline)
 
     return parser
+
+
+def main(argv=None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not hasattr(args, "func"):
+        parser.print_help()
+        return 1
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
