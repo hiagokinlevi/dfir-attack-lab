@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --output-dir option to collect-macos CLI (cycle 47)
+- [x] Add --min-severity filter to generate-report CLI (cycle 48)
