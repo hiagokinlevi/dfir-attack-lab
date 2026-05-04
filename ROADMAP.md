@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --from-file support to parse-logs for newline-delimited input paths (cycle 51)
+- [x] Add --fail-on-empty option to parse-logs CLI (cycle 52)
