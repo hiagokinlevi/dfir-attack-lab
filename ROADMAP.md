@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --event-id filter to parse-logs for Windows EVTX parser (cycle 50)
+- [x] Add --from-file support to parse-logs for newline-delimited input paths (cycle 51)
