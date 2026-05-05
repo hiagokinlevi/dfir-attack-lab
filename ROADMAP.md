@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --since option to parse-logs for timestamp cutoff (cycle 53)
+- [x] Add --sort {asc,desc} option to build-timeline CLI output (cycle 54)
