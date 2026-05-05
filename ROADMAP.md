@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --fail-on-empty option to parse-logs CLI (cycle 52)
+- [x] Add --since option to parse-logs for timestamp cutoff (cycle 53)
