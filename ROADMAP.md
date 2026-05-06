@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --case-id option to collect-linux CLI and stamp metadata in output (cycle 55)
+- [x] Add --case-id filter to generate-report CLI (cycle 56)
