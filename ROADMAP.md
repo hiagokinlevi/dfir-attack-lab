@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --sort {asc,desc} option to build-timeline CLI output (cycle 54)
+- [x] Add --case-id option to collect-linux CLI and stamp metadata in output (cycle 55)
