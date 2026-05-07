@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --summary-only option to generate-report CLI (cycle 58)
+- [x] Add --max-gap-minutes option to build-timeline CLI (cycle 59)
