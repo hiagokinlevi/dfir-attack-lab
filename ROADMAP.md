@@ -44,4 +44,4 @@ Status: **Complete**
   - Captures: host metadata, active sessions, laun
 
 ## Automated Completions
-- [x] Add --strict-schema option to parse-logs CLI (cycle 57)
+- [x] Add --summary-only option to generate-report CLI (cycle 58)
